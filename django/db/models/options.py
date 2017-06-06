@@ -1,4 +1,5 @@
 import copy
+import inspect
 import warnings
 from bisect import bisect
 from collections import OrderedDict, defaultdict
@@ -14,14 +15,13 @@ from django.db.models.fields.proxy import OrderWrt
 from django.db.models.query_utils import PathInfo
 from django.utils.datastructures import ImmutableList, OrderedSet
 from django.utils.deprecation import RemovedInDjango21Warning
-from django.utils.encoding import force_text
 from django.utils.functional import cached_property
 from django.utils.text import camel_case_to_spaces, format_lazy
 from django.utils.translation import override
 
 PROXY_PARENTS = object()
 
-EMPTY_RELATION_TREE = tuple()
+EMPTY_RELATION_TREE = ()
 
 IMMUTABLE_WARNING = (
     "The return type of '%s' should never be mutated. If you want to manipulate this list "
@@ -193,7 +193,7 @@ class Options:
 
             # Any leftover attributes must be invalid.
             if meta_attrs != {}:
-                raise TypeError("'class Meta' got invalid attribute(s): %s" % ','.join(meta_attrs.keys()))
+                raise TypeError("'class Meta' got invalid attribute(s): %s" % ','.join(meta_attrs))
         else:
             self.verbose_name_plural = format_lazy('{}s', self.verbose_name)
         del self.meta
@@ -317,7 +317,7 @@ class Options:
     def verbose_name_raw(self):
         """Return the untranslated verbose name."""
         with override(None):
-            return force_text(self.verbose_name)
+            return str(self.verbose_name)
 
     @property
     def swapped(self):
@@ -829,11 +829,10 @@ class Options:
 
     @cached_property
     def _property_names(self):
-        """
-        Return a set of the names of the properties defined on the model.
-        Internal helper for model initialization.
-        """
-        return frozenset({
-            attr for attr in
-            dir(self.model) if isinstance(getattr(self.model, attr), property)
-        })
+        """Return a set of the names of the properties defined on the model."""
+        names = []
+        for name in dir(self.model):
+            attr = inspect.getattr_static(self.model, name)
+            if isinstance(attr, property):
+                names.append(name)
+        return frozenset(names)

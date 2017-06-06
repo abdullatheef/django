@@ -132,7 +132,7 @@ class Greatest(Func):
 
     def as_sqlite(self, compiler, connection):
         """Use the MAX function on SQLite."""
-        return super().as_sql(compiler, connection, function='MAX')
+        return super().as_sqlite(compiler, connection, function='MAX')
 
 
 class Least(Func):
@@ -152,7 +152,7 @@ class Least(Func):
 
     def as_sqlite(self, compiler, connection):
         """Use the MIN function on SQLite."""
-        return super().as_sql(compiler, connection, function='MIN')
+        return super().as_sqlite(compiler, connection, function='MIN')
 
 
 class Length(Transform):
@@ -196,15 +196,12 @@ class StrIndex(Func):
     function = 'INSTR'
     arity = 2
 
-    def __init__(self, expression, substring, **extra):
+    def __init__(self, string, substring, **extra):
         """
-        expression: the name of a field, or an expression returning a string
-        substring: a string to find inside expression
+        string: the name of a field, or an expression returning a string
+        substring: the name of a field, or an expression returning a string
         """
-        if not hasattr(substring, 'resolve_expression'):
-            substring = Value(substring)
-        expressions = [expression, substring]
-        super().__init__(*expressions, output_field=fields.IntegerField(), **extra)
+        super().__init__(string, substring, output_field=fields.IntegerField(), **extra)
 
     def as_postgresql(self, compiler, connection):
         return super().as_sql(compiler, connection, function='STRPOS')
@@ -222,11 +219,8 @@ class Substr(Func):
         if not hasattr(pos, 'resolve_expression'):
             if pos < 1:
                 raise ValueError("'pos' must be greater than 0")
-            pos = Value(pos)
         expressions = [expression, pos]
         if length is not None:
-            if not hasattr(length, 'resolve_expression'):
-                length = Value(length)
             expressions.append(length)
         super().__init__(*expressions, **extra)
 

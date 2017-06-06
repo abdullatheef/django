@@ -35,12 +35,13 @@ class BaseGeometryWidget(Widget):
 
     def deserialize(self, value):
         try:
-            return GEOSGeometry(value, self.map_srid)
+            return GEOSGeometry(value)
         except (GEOSException, ValueError) as err:
             logger.error("Error creating geometry from value '%s' (%s)", value, err)
         return None
 
     def get_context(self, name, value, attrs):
+        context = super().get_context(name, value, attrs)
         # If a string reaches here (via a validation error on another
         # field) then just reconstruct the Geometry.
         if value and isinstance(value, str):
@@ -48,7 +49,7 @@ class BaseGeometryWidget(Widget):
 
         if value:
             # Check that srid of value and map match
-            if value.srid != self.map_srid:
+            if value.srid and value.srid != self.map_srid:
                 try:
                     ogr = value.ogr
                     ogr.transform(self.map_srid)
@@ -62,15 +63,16 @@ class BaseGeometryWidget(Widget):
         if attrs is None:
             attrs = {}
 
-        context = self.build_attrs(self.attrs, dict(
-            name=name,
-            module='geodjango_%s' % name.replace('-', '_'),  # JS-safe
-            serialized=self.serialize(value),
-            geom_type=gdal.OGRGeomType(self.attrs['geom_type']),
-            STATIC_URL=settings.STATIC_URL,
-            LANGUAGE_BIDI=translation.get_language_bidi(),
-            **attrs
-        ))
+        build_attrs_kwargs = {
+            'name': name,
+            'module': 'geodjango_%s' % name.replace('-', '_'),  # JS-safe
+            'serialized': self.serialize(value),
+            'geom_type': gdal.OGRGeomType(self.attrs['geom_type']),
+            'STATIC_URL': settings.STATIC_URL,
+            'LANGUAGE_BIDI': translation.get_language_bidi(),
+        }
+        build_attrs_kwargs.update(attrs)
+        context.update(self.build_attrs(self.attrs, build_attrs_kwargs))
         return context
 
 
@@ -101,10 +103,11 @@ class OSMWidget(OpenLayersWidget):
     template_name = 'gis/openlayers-osm.html'
     default_lon = 5
     default_lat = 47
+    default_zoom = 12
 
     def __init__(self, attrs=None):
         super().__init__()
-        for key in ('default_lon', 'default_lat'):
+        for key in ('default_lon', 'default_lat', 'default_zoom'):
             self.attrs[key] = getattr(self, key)
         if attrs:
             self.attrs.update(attrs)

@@ -16,7 +16,6 @@ from django.utils import timezone
 from django.utils.dateparse import (
     parse_date, parse_datetime, parse_duration, parse_time,
 )
-from django.utils.encoding import force_text
 
 from .client import DatabaseClient                          # isort:skip
 from .creation import DatabaseCreation                      # isort:skip
@@ -46,6 +45,7 @@ Database.register_adapter(decimal.Decimal, backend_utils.rev_typecast_decimal)
 
 class DatabaseWrapper(BaseDatabaseWrapper):
     vendor = 'sqlite'
+    display_name = 'SQLite'
     # SQLite doesn't actually support most of these types, but it "does the right
     # thing" given more verbose field definitions, so leave them as is so that
     # schema inspection is more useful.
@@ -456,7 +456,7 @@ def _sqlite_timestamp_diff(lhs, rhs):
 
 
 def _sqlite_regexp(re_pattern, re_string):
-    return bool(re.search(re_pattern, force_text(re_string))) if re_string is not None else False
+    return bool(re.search(re_pattern, str(re_string))) if re_string is not None else False
 
 
 def _sqlite_power(x, y):

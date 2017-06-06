@@ -5,7 +5,7 @@ from django.contrib.gis.geos import GEOSGeometry, LineString, Point
 from django.contrib.gis.measure import D  # alias for Distance
 from django.db import connection
 from django.db.models import F, Q
-from django.test import TestCase, skipUnlessDBFeature
+from django.test import TestCase, skipIfDBFeature, skipUnlessDBFeature
 
 from ..utils import no_oracle, oracle, postgis, spatialite
 from .models import (
@@ -14,7 +14,6 @@ from .models import (
 )
 
 
-@skipUnlessDBFeature("gis_enabled")
 class DistanceTest(TestCase):
     fixtures = ['initial']
 
@@ -69,32 +68,35 @@ class DistanceTest(TestCase):
             qs1 = SouthTexasCity.objects.filter(point__dwithin=(self.stx_pnt, dist1))
             qs2 = SouthTexasCityFt.objects.filter(point__dwithin=(self.stx_pnt, dist2))
             for qs in qs1, qs2:
-                self.assertEqual(tx_cities, self.get_names(qs))
+                with self.subTest(dist=dist, qs=qs):
+                    self.assertEqual(tx_cities, self.get_names(qs))
 
         # Now performing the `dwithin` queries on a geodetic coordinate system.
         for dist in au_dists:
-            if isinstance(dist, D) and not oracle:
-                type_error = True
-            else:
-                type_error = False
-
-            if isinstance(dist, tuple):
-                if oracle or spatialite:
-                    # Result in meters
-                    dist = dist[1]
+            with self.subTest(dist=dist):
+                if isinstance(dist, D) and not oracle:
+                    type_error = True
                 else:
-                    # Result in units of the field
-                    dist = dist[0]
+                    type_error = False
 
-            # Creating the query set.
-            qs = AustraliaCity.objects.order_by('name')
-            if type_error:
-                # A ValueError should be raised on PostGIS when trying to pass
-                # Distance objects into a DWithin query using a geodetic field.
-                with self.assertRaises(ValueError):
-                    AustraliaCity.objects.filter(point__dwithin=(self.au_pnt, dist)).count()
-            else:
-                self.assertEqual(au_cities, self.get_names(qs.filter(point__dwithin=(self.au_pnt, dist))))
+                if isinstance(dist, tuple):
+                    if oracle or spatialite:
+                        # Result in meters
+                        dist = dist[1]
+                    else:
+                        # Result in units of the field
+                        dist = dist[0]
+
+                # Creating the query set.
+                qs = AustraliaCity.objects.order_by('name')
+                if type_error:
+                    # A ValueError should be raised on PostGIS when trying to
+                    # pass Distance objects into a DWithin query using a
+                    # geodetic field.
+                    with self.assertRaises(ValueError):
+                        AustraliaCity.objects.filter(point__dwithin=(self.au_pnt, dist)).count()
+                else:
+                    self.assertEqual(au_cities, self.get_names(qs.filter(point__dwithin=(self.au_pnt, dist))))
 
     @skipUnlessDBFeature("supports_distances_lookups")
     def test_distance_lookups(self):
@@ -238,7 +240,6 @@ Perimeter(geom1)                                |    OK              |      :-( 
 '''  # NOQA
 
 
-@skipUnlessDBFeature("gis_enabled")
 class DistanceFunctionsTests(TestCase):
     fixtures = ['initial']
 
@@ -300,8 +301,9 @@ class DistanceFunctionsTests(TestCase):
         # Ensuring expected distances are returned for each distance queryset.
         for qs in dist_qs:
             for i, c in enumerate(qs):
-                self.assertAlmostEqual(m_distances[i], c.distance.m, tol)
-                self.assertAlmostEqual(ft_distances[i], c.distance.survey_ft, tol)
+                with self.subTest(c=c):
+                    self.assertAlmostEqual(m_distances[i], c.distance.m, tol)
+                    self.assertAlmostEqual(ft_distances[i], c.distance.survey_ft, tol)
 
     @skipUnlessDBFeature("has_Distance_function", "supports_distance_geodetic")
     def test_distance_geodetic(self):
@@ -320,9 +322,10 @@ class DistanceFunctionsTests(TestCase):
                      40435.4335201384, 0, 68272.3896586844, 12375.0643697706, 0]
         qs = AustraliaCity.objects.annotate(distance=Distance('point', ls)).order_by('name')
         for city, distance in zip(qs, distances):
-            # Testing equivalence to within a meter (kilometer on SpatiaLite).
-            tol = -3 if spatialite else 0
-            self.assertAlmostEqual(distance, city.distance.m, tol)
+            with self.subTest(city=city, distance=distance):
+                # Testing equivalence to within a meter (kilometer on SpatiaLite).
+                tol = -3 if spatialite else 0
+                self.assertAlmostEqual(distance, city.distance.m, tol)
 
     @skipUnlessDBFeature("has_Distance_function", "supports_distance_geodetic")
     def test_distance_geodetic_spheroid(self):
@@ -351,14 +354,41 @@ class DistanceFunctionsTests(TestCase):
             distance=Distance('point', hillsdale.point, spheroid=True)
         ).order_by('id')
         for i, c in enumerate(qs):
-            self.assertAlmostEqual(spheroid_distances[i], c.distance.m, tol)
+            with self.subTest(c=c):
+                self.assertAlmostEqual(spheroid_distances[i], c.distance.m, tol)
         if postgis or spatialite:
             # PostGIS uses sphere-only distances by default, testing these as well.
             qs = AustraliaCity.objects.exclude(id=hillsdale.id).annotate(
                 distance=Distance('point', hillsdale.point)
             ).order_by('id')
             for i, c in enumerate(qs):
-                self.assertAlmostEqual(sphere_distances[i], c.distance.m, tol)
+                with self.subTest(c=c):
+                    self.assertAlmostEqual(sphere_distances[i], c.distance.m, tol)
+
+    @skipIfDBFeature("supports_distance_geodetic")
+    @skipUnlessDBFeature("has_Distance_function")
+    def test_distance_function_raw_result(self):
+        distance = Interstate.objects.annotate(
+            d=Distance(Point(0, 0, srid=4326), Point(0, 1, srid=4326)),
+        ).first().d
+        self.assertEqual(distance, 1)
+
+    @skipUnlessDBFeature("has_Distance_function")
+    def test_distance_function_d_lookup(self):
+        qs = Interstate.objects.annotate(
+            d=Distance(Point(0, 0, srid=3857), Point(0, 1, srid=3857)),
+        ).filter(d=D(m=1))
+        self.assertTrue(qs.exists())
+
+    @skipIfDBFeature("supports_distance_geodetic")
+    @skipUnlessDBFeature("has_Distance_function")
+    def test_distance_function_raw_result_d_lookup(self):
+        qs = Interstate.objects.annotate(
+            d=Distance(Point(0, 0, srid=4326), Point(0, 1, srid=4326)),
+        ).filter(d=D(m=1))
+        msg = 'Distance measure is supplied, but units are unknown for result.'
+        with self.assertRaisesMessage(ValueError, msg):
+            list(qs)
 
     @no_oracle  # Oracle already handles geographic distance calculation.
     @skipUnlessDBFeature("has_Distance_function", 'has_Transform_function')
@@ -391,7 +421,7 @@ class DistanceFunctionsTests(TestCase):
             qs = CensusZipcode.objects.exclude(name='77005').annotate(
                 distance=Distance(Transform('poly', 32140), buf)
             ).order_by('name')
-            self.assertEqual(ref_zips, sorted([c.name for c in qs]))
+            self.assertEqual(ref_zips, sorted(c.name for c in qs))
             for i, z in enumerate(qs):
                 self.assertAlmostEqual(z.distance.m, dists_m[i], 5)
 
@@ -429,6 +459,9 @@ class DistanceFunctionsTests(TestCase):
         self.assertTrue(
             SouthTexasInterstate.objects.annotate(length=Length('path')).filter(length__gt=4000).exists()
         )
+        # Length with an explicit geometry value.
+        qs = Interstate.objects.annotate(length=Length(i10.path))
+        self.assertAlmostEqual(qs.first().length.m, len_m2, 2)
 
     @skipUnlessDBFeature("has_Perimeter_function")
     def test_perimeter(self):

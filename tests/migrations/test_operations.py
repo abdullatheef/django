@@ -207,7 +207,7 @@ class OperationTests(OperationTestBase):
         definition = operation.deconstruct()
         self.assertEqual(definition[0], "CreateModel")
         self.assertEqual(definition[1], [])
-        self.assertEqual(sorted(definition[2].keys()), ["fields", "name"])
+        self.assertEqual(sorted(definition[2]), ["fields", "name"])
         # And default manager not in set
         operation = migrations.CreateModel("Foo", fields=[], managers=[("objects", models.Manager())])
         definition = operation.deconstruct()
@@ -430,7 +430,7 @@ class OperationTests(OperationTestBase):
         definition = operation.deconstruct()
         self.assertEqual(definition[0], "CreateModel")
         self.assertEqual(definition[1], [])
-        self.assertEqual(sorted(definition[2].keys()), ["bases", "fields", "name", "options"])
+        self.assertEqual(sorted(definition[2]), ["bases", "fields", "name", "options"])
 
     def test_create_unmanaged_model(self):
         """
@@ -1105,7 +1105,7 @@ class OperationTests(OperationTestBase):
         ])
         self.assertTableExists("test_rmflmmwt_ponystables")
 
-        operations = [migrations.RemoveField("Pony", "stables")]
+        operations = [migrations.RemoveField("Pony", "stables"), migrations.DeleteModel("PonyStables")]
         self.apply_operations("test_rmflmmwt", project_state, operations=operations)
 
     def test_remove_field(self):
@@ -1488,6 +1488,29 @@ class OperationTests(OperationTestBase):
         # And test reversal
         self.unapply_operations("test_rmin", project_state, operations=operations)
         self.assertIndexExists("test_rmin_pony", ["pink", "weight"])
+
+    def test_add_index_state_forwards(self):
+        project_state = self.set_up_test_model('test_adinsf')
+        index = models.Index(fields=['pink'], name='test_adinsf_pony_pink_idx')
+        old_model = project_state.apps.get_model('test_adinsf', 'Pony')
+        new_state = project_state.clone()
+
+        operation = migrations.AddIndex('Pony', index)
+        operation.state_forwards('test_adinsf', new_state)
+        new_model = new_state.apps.get_model('test_adinsf', 'Pony')
+        self.assertIsNot(old_model, new_model)
+
+    def test_remove_index_state_forwards(self):
+        project_state = self.set_up_test_model('test_rminsf')
+        index = models.Index(fields=['pink'], name='test_rminsf_pony_pink_idx')
+        migrations.AddIndex('Pony', index).state_forwards('test_rminsf', project_state)
+        old_model = project_state.apps.get_model('test_rminsf', 'Pony')
+        new_state = project_state.clone()
+
+        operation = migrations.RemoveIndex('Pony', 'test_rminsf_pony_pink_idx')
+        operation.state_forwards('test_rminsf', new_state)
+        new_model = new_state.apps.get_model('test_rminsf', 'Pony')
+        self.assertIsNot(old_model, new_model)
 
     def test_alter_field_with_index(self):
         """

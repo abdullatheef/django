@@ -45,6 +45,7 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.AutoField(verbose_name='ID', serialize=False, auto_created=True, primary_key=True)),
                 ('field', HStoreField(blank=True, null=True)),
+                ('array_field', ArrayField(HStoreField(), null=True)),
             ],
             options={
                 'required_db_vendor': 'postgresql',
@@ -141,6 +142,7 @@ class Migration(migrations.Migration):
                 ('name', CICharField(primary_key=True, max_length=255)),
                 ('email', CIEmailField()),
                 ('description', CITextField()),
+                ('array_field', ArrayField(CITextField(), null=True)),
             ],
             options={
                 'required_db_vendor': 'postgresql',
@@ -189,6 +191,13 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.AutoField(verbose_name='ID', serialize=False, auto_created=True, primary_key=True)),
                 ('when', models.DateTimeField(null=True, default=None)),
+            ]
+        ),
+        migrations.CreateModel(
+            name='UUIDTestModel',
+            fields=[
+                ('id', models.AutoField(verbose_name='ID', serialize=False, auto_created=True, primary_key=True)),
+                ('uuid', models.UUIDField(default=None, null=True)),
             ]
         ),
         migrations.CreateModel(

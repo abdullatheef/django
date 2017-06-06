@@ -9,8 +9,8 @@ from django.test.utils import CaptureQueriesContext
 from .models import (
     Author, Author2, AuthorAddress, AuthorWithAge, Bio, Book, Bookmark,
     BookReview, BookWithYear, Comment, Department, Employee, FavoriteAuthors,
-    House, LessonEntry, Person, Qualification, Reader, Room, TaggedItem,
-    Teacher, WordEntry,
+    House, LessonEntry, ModelIterableSubclass, Person, Qualification, Reader,
+    Room, TaggedItem, Teacher, WordEntry,
 )
 
 
@@ -708,6 +708,9 @@ class CustomPrefetchTests(TestCase):
     def test_values_queryset(self):
         with self.assertRaisesMessage(ValueError, 'Prefetch querysets cannot use values().'):
             Prefetch('houses', House.objects.values('pk'))
+        # That error doesn't affect managers with custom ModelIterable subclasses
+        self.assertIs(Teacher.objects_custom.all()._iterable_class, ModelIterableSubclass)
+        Prefetch('teachers', Teacher.objects_custom.all())
 
     def test_to_attr_doesnt_cache_through_attr_as_list(self):
         house = House.objects.prefetch_related(
@@ -855,7 +858,7 @@ class GenericRelationTests(TestCase):
 
         with self.assertNumQueries(3):
             bookmark = Bookmark.objects.filter(pk=b.pk).prefetch_related('tags', 'favorite_tags')[0]
-            self.assertEqual(sorted([i.tag for i in bookmark.tags.all()]), ["django", "python"])
+            self.assertEqual(sorted(i.tag for i in bookmark.tags.all()), ["django", "python"])
             self.assertEqual([i.tag for i in bookmark.favorite_tags.all()], ["python"])
 
     def test_custom_queryset(self):
@@ -1262,13 +1265,19 @@ class Ticket21760Tests(TestCase):
         self.assertNotIn(' JOIN ', str(queryset.query))
 
 
-class Ticket25546Tests(TestCase):
+class DirectPrefechedObjectCacheReuseTests(TestCase):
     """
-    Nested prefetch_related() shouldn't trigger duplicate queries for the same
-    lookup.
+    prefetch_related() reuses objects fetched in _prefetched_objects_cache.
 
-    Before, prefetch queries were for 'addresses', 'first_time_authors', and
-    'first_time_authors__addresses'. The last query is the duplicate.
+    When objects are prefetched and not stored as an instance attribute (often
+    intermediary relationships), they are saved to the
+    _prefetched_objects_cache attribute. prefetch_related() takes
+    _prefetched_objects_cache into account when determining whether an object
+    has been fetched[1] and retrieves results from it when it is populated [2].
+
+    [1]: #25546 (duplicate queries on nested Prefetch)
+    [2]: #27554 (queryset evaluation fails with a mix of nested and flattened
+        prefetches)
     """
 
     @classmethod
@@ -1288,7 +1297,11 @@ class Ticket25546Tests(TestCase):
             AuthorAddress.objects.create(author=cls.author21, address='Happy place'),
         ]
 
-    def test_prefetch(self):
+    def test_detect_is_fetched(self):
+        """
+        Nested prefetch_related() shouldn't trigger duplicate queries for the same
+        lookup.
+        """
         with self.assertNumQueries(3):
             books = Book.objects.filter(
                 title__in=['book1', 'book2'],
@@ -1332,7 +1345,7 @@ class Ticket25546Tests(TestCase):
             list(book2.first_time_authors.all()[0].addresses.all().all())
         )
 
-    def test_prefetch_with_to_attr(self):
+    def test_detect_is_fetched_with_to_attr(self):
         with self.assertNumQueries(3):
             books = Book.objects.filter(
                 title__in=['book1', 'book2'],
@@ -1358,3 +1371,37 @@ class Ticket25546Tests(TestCase):
             self.assertEqual(book1.first_authors[0].happy_place, [self.author1_address1])
             self.assertEqual(book1.first_authors[1].happy_place, [])
             self.assertEqual(book2.first_authors[0].happy_place, [self.author2_address1])
+
+
+class ReadPrefetchedObjectsCacheTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.book1 = Book.objects.create(title='Les confessions Volume I')
+        cls.book2 = Book.objects.create(title='Candide')
+        cls.author1 = AuthorWithAge.objects.create(name='Rousseau', first_book=cls.book1, age=70)
+        cls.author2 = AuthorWithAge.objects.create(name='Voltaire', first_book=cls.book2, age=65)
+        cls.book1.authors.add(cls.author1)
+        cls.book2.authors.add(cls.author2)
+        FavoriteAuthors.objects.create(author=cls.author1, likes_author=cls.author2)
+
+    def test_retrieves_results_from_prefetched_objects_cache(self):
+        """
+        When intermediary results are prefetched without a destination
+        attribute, they are saved in the RelatedManager's cache
+        (_prefetched_objects_cache). prefetch_related() uses this cache
+        (#27554).
+        """
+        authors = AuthorWithAge.objects.prefetch_related(
+            Prefetch(
+                'author',
+                queryset=Author.objects.prefetch_related(
+                    # Results are saved in the RelatedManager's cache
+                    # (_prefetched_objects_cache) and do not replace the
+                    # RelatedManager on Author instances (favorite_authors)
+                    Prefetch('favorite_authors__first_book'),
+                ),
+            ),
+        )
+        with self.assertNumQueries(4):
+            # AuthorWithAge -> Author -> FavoriteAuthors, Book
+            self.assertQuerysetEqual(authors, ['<AuthorWithAge: Rousseau>', '<AuthorWithAge: Voltaire>'])

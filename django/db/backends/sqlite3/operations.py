@@ -21,8 +21,12 @@ class DatabaseOperations(BaseDatabaseOperations):
         If there's only a single field to insert, the limit is 500
         (SQLITE_MAX_COMPOUND_SELECT).
         """
-        limit = 999 if len(fields) > 1 else 500
-        return (limit // len(fields)) if len(fields) > 0 else len(objs)
+        if len(fields) == 1:
+            return 500
+        elif len(fields) > 1:
+            return self.connection.features.max_query_params // len(fields)
+        else:
+            return len(objs)
 
     def check_expression_support(self, expression):
         bad_fields = (fields.DateField, fields.DateTimeField, fields.TimeField)
@@ -128,10 +132,9 @@ class DatabaseOperations(BaseDatabaseOperations):
             if isinstance(params, (list, tuple)):
                 params = self._quote_params_for_last_executed_query(params)
             else:
-                keys = params.keys()
                 values = tuple(params.values())
                 values = self._quote_params_for_last_executed_query(values)
-                params = dict(zip(keys, values))
+                params = dict(zip(params, values))
             return sql % params
         # For consistency with SQLiteCursorWrapper.execute(), just return sql
         # when there are no parameters. See #13648 and #17158.

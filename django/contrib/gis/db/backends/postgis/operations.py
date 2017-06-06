@@ -1,8 +1,9 @@
 import re
 
 from django.conf import settings
-from django.contrib.gis.db.backends.base.operations import \
-    BaseSpatialOperations
+from django.contrib.gis.db.backends.base.operations import (
+    BaseSpatialOperations,
+)
 from django.contrib.gis.db.backends.utils import SpatialOperator
 from django.contrib.gis.gdal import GDALRaster
 from django.contrib.gis.measure import Distance
@@ -96,7 +97,7 @@ class PostGISDistanceOperator(PostGISOperator):
                 sql_template = '%(func)s(%(lhs)s, %(rhs)s, %%s) %(op)s %(value)s'
                 # Using DistanceSpheroid requires the spheroid of the field as
                 # a parameter.
-                sql_params.insert(1, lookup.lhs.output_field._spheroid)
+                sql_params.insert(1, lookup.lhs.output_field.spheroid(connection))
             else:
                 template_params.update({'op': self.op, 'func': connection.ops.spatial_function_name('DistanceSphere')})
             return sql_template % template_params, sql_params
@@ -134,7 +135,6 @@ class PostGISOperations(BaseSpatialOperations, DatabaseOperations):
         'disjoint': PostGISOperator(func='ST_Disjoint', raster=BILATERAL),
         'equals': PostGISOperator(func='ST_Equals'),
         'intersects': PostGISOperator(func='ST_Intersects', geography=True, raster=BILATERAL),
-        'isvalid': PostGISOperator(func='ST_IsValid'),
         'overlaps': PostGISOperator(func='ST_Overlaps', raster=BILATERAL),
         'relate': PostGISOperator(func='ST_Relate'),
         'touches': PostGISOperator(func='ST_Touches', raster=BILATERAL),
@@ -293,6 +293,12 @@ class PostGISOperations(BaseSpatialOperations, DatabaseOperations):
         substitute in the ST_Transform() function call.
         """
         tranform_func = self.spatial_function_name('Transform')
+        if hasattr(value, 'as_sql'):
+            if value.field.srid == f.srid:
+                placeholder = '%s'
+            else:
+                placeholder = '%s(%%s, %s)' % (tranform_func, f.srid)
+            return placeholder
 
         # Get the srid for this object
         if value is None:
@@ -310,13 +316,6 @@ class PostGISOperations(BaseSpatialOperations, DatabaseOperations):
             placeholder = '%s((%%s)::raster, %s)' % (tranform_func, f.srid)
         else:
             placeholder = '%s(%%s, %s)' % (tranform_func, f.srid)
-
-        if hasattr(value, 'as_sql'):
-            # If this is an F expression, then we don't really want
-            # a placeholder and instead substitute in the column
-            # of the expression.
-            sql, _ = compiler.compile(value)
-            placeholder = placeholder % sql
 
         return placeholder
 

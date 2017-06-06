@@ -43,21 +43,16 @@ Band 1 Block=163x50 Type=Byte, ColorInterp=Gray
 import os
 import struct
 import tempfile
-import unittest
 
-from django.contrib.gis.gdal import HAS_GDAL
+from django.contrib.gis.gdal import GDAL_VERSION, GDALRaster
 from django.contrib.gis.gdal.error import GDALException
+from django.contrib.gis.gdal.raster.band import GDALBand
 from django.contrib.gis.shortcuts import numpy
 from django.test import SimpleTestCase
 
 from ..data.rasters.textrasters import JSON_RASTER
 
-if HAS_GDAL:
-    from django.contrib.gis.gdal import GDALRaster, GDAL_VERSION
-    from django.contrib.gis.gdal.raster.band import GDALBand
 
-
-@unittest.skipUnless(HAS_GDAL, "GDAL is required")
 class GDALRasterTests(SimpleTestCase):
     """
     Test a GDALRaster instance created from a file (GeoTiff).
@@ -108,6 +103,9 @@ class GDALRasterTests(SimpleTestCase):
         self.assertEqual(self.rs.skew.y, 0)
         # Create in-memory rasters and change gtvalues
         rsmem = GDALRaster(JSON_RASTER)
+        # geotransform accepts both floats and ints
+        rsmem.geotransform = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+        self.assertEqual(rsmem.geotransform, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
         rsmem.geotransform = range(6)
         self.assertEqual(rsmem.geotransform, [float(x) for x in range(6)])
         self.assertEqual(rsmem.origin, [0, 3])
@@ -121,6 +119,18 @@ class GDALRasterTests(SimpleTestCase):
         self.assertEqual(rsmem.skew.y, 4)
         self.assertEqual(rsmem.width, 5)
         self.assertEqual(rsmem.height, 5)
+
+    def test_geotransform_bad_inputs(self):
+        rsmem = GDALRaster(JSON_RASTER)
+        error_geotransforms = [
+            [1, 2],
+            [1, 2, 3, 4, 5, 'foo'],
+            [1, 2, 3, 4, 5, 6, 'foo'],
+        ]
+        msg = 'Geotransform must consist of 6 numeric values.'
+        for geotransform in error_geotransforms:
+            with self.subTest(i=geotransform), self.assertRaisesMessage(ValueError, msg):
+                rsmem.geotransform = geotransform
 
     def test_rs_extent(self):
         self.assertEqual(
@@ -383,7 +393,6 @@ class GDALRasterTests(SimpleTestCase):
         )
 
 
-@unittest.skipUnless(HAS_GDAL, "GDAL is required")
 class GDALBandTests(SimpleTestCase):
     def setUp(self):
         self.rs_path = os.path.join(os.path.dirname(__file__), '../data/rasters/raster.tif')

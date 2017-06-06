@@ -81,6 +81,16 @@ simple_two_params.anything = "Expected simple_two_params __dict__"
 
 
 @register.simple_tag
+def simple_keyword_only_param(*, kwarg):
+    return "simple_keyword_only_param - Expected result: %s" % kwarg
+
+
+@register.simple_tag
+def simple_keyword_only_default(*, kwarg=42):
+    return "simple_keyword_only_default - Expected result: %s" % kwarg
+
+
+@register.simple_tag
 def simple_one_default(one, two='hi'):
     """Expected simple_one_default __doc__"""
     return "simple_one_default - Expected result: %s, %s" % (one, two)
@@ -166,3 +176,18 @@ def minustwo_overridden_name(value):
 
 
 register.simple_tag(lambda x: x - 1, name='minusone')
+
+
+@register.tag('counter')
+def counter(parser, token):
+    return CounterNode()
+
+
+class CounterNode(template.Node):
+    def __init__(self):
+        self.count = 0
+
+    def render(self, context):
+        count = self.count
+        self.count = count + 1
+        return count

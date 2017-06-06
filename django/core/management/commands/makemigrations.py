@@ -27,20 +27,19 @@ class Command(BaseCommand):
             help='Specify the app label(s) to create migrations for.',
         )
         parser.add_argument(
-            '--dry-run', action='store_true', dest='dry_run', default=False,
+            '--dry-run', action='store_true', dest='dry_run',
             help="Just show what migrations would be made; don't actually write them.",
         )
         parser.add_argument(
-            '--merge', action='store_true', dest='merge', default=False,
+            '--merge', action='store_true', dest='merge',
             help="Enable fixing of migration conflicts.",
         )
         parser.add_argument(
-            '--empty', action='store_true', dest='empty', default=False,
+            '--empty', action='store_true', dest='empty',
             help="Create an empty migration.",
         )
         parser.add_argument(
-            '--noinput', '--no-input',
-            action='store_false', dest='interactive', default=True,
+            '--noinput', '--no-input', action='store_false', dest='interactive',
             help='Tells Django to NOT prompt the user for input of any kind.',
         )
         parser.add_argument(
@@ -79,7 +78,7 @@ class Command(BaseCommand):
         loader = MigrationLoader(None, ignore_no_migrations=True)
 
         # Raise an error if any migrations are applied before their dependencies.
-        consistency_check_labels = set(config.label for config in apps.get_app_configs())
+        consistency_check_labels = {config.label for config in apps.get_app_configs()}
         # Non-default databases are only checked if database routers used.
         aliases_to_check = connections if settings.DATABASE_ROUTERS else [DEFAULT_DB_ALIAS]
         for alias in sorted(aliases_to_check):
@@ -245,7 +244,7 @@ class Command(BaseCommand):
             def all_items_equal(seq):
                 return all(item == seq[0] for item in seq[1:])
 
-            merge_migrations_generations = zip(*[m.ancestry for m in merge_migrations])
+            merge_migrations_generations = zip(*(m.ancestry for m in merge_migrations))
             common_ancestor_count = sum(1 for common_ancestor_generation
                                         in takewhile(all_items_equal, merge_migrations_generations))
             if not common_ancestor_count:

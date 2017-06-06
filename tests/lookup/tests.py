@@ -1,8 +1,10 @@
 import collections
 from datetime import datetime
+from math import ceil
 from operator import attrgetter
 
 from django.core.exceptions import FieldError
+from django.db import connection
 from django.test import TestCase, skipUnlessDBFeature
 
 from .models import Article, Author, Game, Player, Season, Tag
@@ -127,6 +129,15 @@ class LookupTests(TestCase):
         with self.assertRaises(TypeError):
             Article.objects.in_bulk(headline__startswith='Blah')
 
+    def test_in_bulk_lots_of_ids(self):
+        test_range = 2000
+        max_query_params = connection.features.max_query_params
+        expected_num_queries = ceil(test_range / max_query_params) if max_query_params else 1
+        Author.objects.bulk_create([Author() for i in range(test_range - Author.objects.count())])
+        authors = {author.pk: author for author in Author.objects.all()}
+        with self.assertNumQueries(expected_num_queries):
+            self.assertEqual(Author.objects.in_bulk(authors), authors)
+
     def test_values(self):
         # values() returns a list of dictionaries instead of object instances --
         # and you can specify which fields you want to retrieve.
@@ -196,7 +207,7 @@ class LookupTests(TestCase):
             'id_plus_eight': 'id+8',
         }
         self.assertSequenceEqual(
-            Article.objects.filter(id=self.a1.id).extra(select=data).values(*data.keys()),
+            Article.objects.filter(id=self.a1.id).extra(select=data).values(*data),
             [{
                 'id_plus_one': self.a1.id + 1,
                 'id_plus_two': self.a1.id + 2,

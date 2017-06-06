@@ -38,7 +38,6 @@ from django.http.response import HttpResponseBase
 from django.template.response import SimpleTemplateResponse, TemplateResponse
 from django.urls import reverse
 from django.utils.decorators import method_decorator
-from django.utils.encoding import force_text
 from django.utils.html import format_html
 from django.utils.http import urlencode
 from django.utils.safestring import mark_safe
@@ -358,7 +357,7 @@ class BaseModelAdmin(metaclass=forms.MediaDefiningClass):
             # It is allowed to filter on values that would be found from local
             # model anyways. For example, if you filter on employee__department__id,
             # then the id value would be found already from employee__department_id.
-            if not prev_field or (prev_field.concrete and
+            if not prev_field or (prev_field.is_relation and
                                   field not in prev_field.get_path_info()[-1].target_fields):
                 relation_parts.append(part)
             if not getattr(field, 'get_path_info', None):
@@ -722,7 +721,7 @@ class ModelAdmin(BaseModelAdmin):
             user_id=request.user.pk,
             content_type_id=get_content_type_for_model(object).pk,
             object_id=object.pk,
-            object_repr=force_text(object),
+            object_repr=str(object),
             action_flag=ADDITION,
             change_message=message,
         )
@@ -738,7 +737,7 @@ class ModelAdmin(BaseModelAdmin):
             user_id=request.user.pk,
             content_type_id=get_content_type_for_model(object).pk,
             object_id=object.pk,
-            object_repr=force_text(object),
+            object_repr=str(object),
             action_flag=CHANGE,
             change_message=message,
         )
@@ -763,7 +762,7 @@ class ModelAdmin(BaseModelAdmin):
         """
         A list_display column containing a checkbox widget.
         """
-        return helpers.checkbox.render(helpers.ACTION_CHECKBOX_NAME, force_text(obj.pk))
+        return helpers.checkbox.render(helpers.ACTION_CHECKBOX_NAME, str(obj.pk))
     action_checkbox.short_description = mark_safe('<input type="checkbox" id="action-toggle" />')
 
     def get_actions(self, request):
@@ -1045,18 +1044,17 @@ class ModelAdmin(BaseModelAdmin):
         Determine the HttpResponse for the add_view stage.
         """
         opts = obj._meta
-        pk_value = obj._get_pk_val()
         preserved_filters = self.get_preserved_filters(request)
         obj_url = reverse(
             'admin:%s_%s_change' % (opts.app_label, opts.model_name),
-            args=(quote(pk_value),),
+            args=(quote(obj.pk),),
             current_app=self.admin_site.name,
         )
         # Add a link to the object's change form if the user can edit the obj.
         if self.has_change_permission(request, obj):
             obj_repr = format_html('<a href="{}">{}</a>', urlquote(obj_url), obj)
         else:
-            obj_repr = force_text(obj)
+            obj_repr = str(obj)
         msg_dict = {
             'name': opts.verbose_name,
             'obj': obj_repr,
@@ -1146,7 +1144,6 @@ class ModelAdmin(BaseModelAdmin):
             })
 
         opts = self.model._meta
-        pk_value = obj._get_pk_val()
         preserved_filters = self.get_preserved_filters(request)
 
         msg_dict = {
@@ -1171,7 +1168,7 @@ class ModelAdmin(BaseModelAdmin):
             self.message_user(request, msg, messages.SUCCESS)
             redirect_url = reverse('admin:%s_%s_change' %
                                    (opts.app_label, opts.model_name),
-                                   args=(pk_value,),
+                                   args=(obj.pk,),
                                    current_app=self.admin_site.name)
             redirect_url = add_preserved_filters({'preserved_filters': preserved_filters, 'opts': opts}, redirect_url)
             return HttpResponseRedirect(redirect_url)
@@ -1547,7 +1544,7 @@ class ModelAdmin(BaseModelAdmin):
             # and the 'invalid=1' parameter was already in the query string,
             # something is screwed up with the database, so display an error
             # page.
-            if ERROR_FLAG in request.GET.keys():
+            if ERROR_FLAG in request.GET:
                 return SimpleTemplateResponse('admin/invalid_setup.html', {
                     'title': _('Database error'),
                 })
@@ -1652,7 +1649,7 @@ class ModelAdmin(BaseModelAdmin):
 
         context = dict(
             self.admin_site.each_context(request),
-            module_name=force_text(opts.verbose_name_plural),
+            module_name=str(opts.verbose_name_plural),
             selection_note=_('0 of %(cnt)s selected') % {'cnt': len(cl.result_list)},
             selection_note_all=selection_note_all % {'total_count': cl.result_count},
             title=cl.title,
@@ -1710,7 +1707,7 @@ class ModelAdmin(BaseModelAdmin):
         if request.POST and not protected:  # The user has confirmed the deletion.
             if perms_needed:
                 raise PermissionDenied
-            obj_display = force_text(obj)
+            obj_display = str(obj)
             attr = str(to_field) if to_field else opts.pk.attname
             obj_id = obj.serializable_value(attr)
             self.log_deletion(request, obj, obj_display)
@@ -1718,7 +1715,7 @@ class ModelAdmin(BaseModelAdmin):
 
             return self.response_delete(request, obj_display, obj_id)
 
-        object_name = force_text(opts.verbose_name)
+        object_name = str(opts.verbose_name)
 
         if perms_needed or protected:
             title = _("Cannot delete %(name)s") % {"name": object_name}
@@ -1769,7 +1766,7 @@ class ModelAdmin(BaseModelAdmin):
             self.admin_site.each_context(request),
             title=_('Change history: %s') % obj,
             action_list=action_list,
-            module_name=capfirst(force_text(opts.verbose_name_plural)),
+            module_name=str(capfirst(opts.verbose_name_plural)),
             object=obj,
             opts=opts,
             preserved_filters=self.get_preserved_filters(request),

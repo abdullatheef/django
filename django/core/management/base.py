@@ -240,7 +240,7 @@ class BaseCommand:
         )
         parser.add_argument('--traceback', action='store_true', help='Raise on CommandError exceptions')
         parser.add_argument(
-            '--no-color', action='store_true', dest='no_color', default=False,
+            '--no-color', action='store_true', dest='no_color',
             help="Don't colorize the command output.",
         )
         self.add_arguments(parser)
@@ -428,7 +428,7 @@ class BaseCommand:
 
         plan = executor.migration_plan(executor.loader.graph.leaf_nodes())
         if plan:
-            apps_waiting_migration = sorted(set(migration.app_label for migration, backwards in plan))
+            apps_waiting_migration = sorted({migration.app_label for migration, backwards in plan})
             self.stdout.write(
                 self.style.NOTICE(
                     "\nYou have %(unpplied_migration_count)s unapplied migration(s). "

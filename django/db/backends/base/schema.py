@@ -3,6 +3,7 @@ import logging
 from datetime import datetime
 
 from django.db.backends.utils import strip_quotes
+from django.db.models import Index
 from django.db.transaction import TransactionManagementError, atomic
 from django.utils import timezone
 from django.utils.encoding import force_bytes
@@ -323,8 +324,8 @@ class BaseDatabaseSchemaEditor:
         unique_togethers must be doubly-nested, not the single-nested
         ["foo", "bar"] format.
         """
-        olds = set(tuple(fields) for fields in old_unique_together)
-        news = set(tuple(fields) for fields in new_unique_together)
+        olds = {tuple(fields) for fields in old_unique_together}
+        news = {tuple(fields) for fields in new_unique_together}
         # Deleted uniques
         for fields in olds.difference(news):
             self._delete_composed_index(model, fields, {'unique': True}, self.sql_delete_unique)
@@ -339,8 +340,8 @@ class BaseDatabaseSchemaEditor:
         index_togethers must be doubly-nested, not the single-nested
         ["foo", "bar"] format.
         """
-        olds = set(tuple(fields) for fields in old_index_together)
-        news = set(tuple(fields) for fields in new_index_together)
+        olds = {tuple(fields) for fields in old_index_together}
+        news = {tuple(fields) for fields in new_index_together}
         # Deleted indexes
         for fields in olds.difference(news):
             self._delete_composed_index(model, fields, {'index': True}, self.sql_delete_index)
@@ -410,6 +411,7 @@ class BaseDatabaseSchemaEditor:
                 "table": self.quote_name(model._meta.db_table),
                 "changes": self.sql_alter_column_no_default % {
                     "column": self.quote_name(field.column),
+                    "type": db_params['type'],
                 }
             }
             self.execute(sql)
@@ -540,8 +542,16 @@ class BaseDatabaseSchemaEditor:
         # True               | False            | True               | True
         if old_field.db_index and not old_field.unique and (not new_field.db_index or new_field.unique):
             # Find the index for this field
-            index_names = self._constraint_names(model, [old_field.column], index=True)
+            meta_index_names = {index.name for index in model._meta.indexes}
+            # Retrieve only BTREE indexes since this is what's created with
+            # db_index=True.
+            index_names = self._constraint_names(model, [old_field.column], index=True, type_=Index.suffix)
             for index_name in index_names:
+                if index_name in meta_index_names:
+                    # The only way to check if an index was created with
+                    # db_index=True or with Index(['field'], name='foo')
+                    # is to look at its name (refs #28053).
+                    continue
                 self.execute(self._delete_constraint_sql(self.sql_delete_index, model, index_name))
         # Change check constraints?
         if old_db_params['check'] != new_db_params['check'] and old_db_params['check']:
@@ -578,6 +588,8 @@ class BaseDatabaseSchemaEditor:
         old_default = self.effective_default(old_field)
         new_default = self.effective_default(new_field)
         needs_database_default = (
+            old_field.null and
+            not new_field.null and
             old_default != new_default and
             new_default is not None and
             not self.skip_default(new_field)
@@ -698,14 +710,7 @@ class BaseDatabaseSchemaEditor:
         # will always come along and replace it.
         if not old_field.primary_key and new_field.primary_key:
             # First, drop the old PK
-            constraint_names = self._constraint_names(model, primary_key=True)
-            if strict and len(constraint_names) != 1:
-                raise ValueError("Found wrong number (%s) of PK constraints for %s" % (
-                    len(constraint_names),
-                    model._meta.db_table,
-                ))
-            for constraint_name in constraint_names:
-                self.execute(self._delete_constraint_sql(self.sql_delete_pk, model, constraint_name))
+            self._delete_primary_key(model, strict)
             # Make the new one
             self.execute(
                 self.sql_create_pk % {
@@ -940,7 +945,7 @@ class BaseDatabaseSchemaEditor:
 
     def _constraint_names(self, model, column_names=None, unique=None,
                           primary_key=None, index=None, foreign_key=None,
-                          check=None):
+                          check=None, type_=None):
         """Return all constraint names matching the columns and conditions."""
         if column_names is not None:
             column_names = [
@@ -962,5 +967,17 @@ class BaseDatabaseSchemaEditor:
                     continue
                 if foreign_key is not None and not infodict['foreign_key']:
                     continue
+                if type_ is not None and infodict['type'] != type_:
+                    continue
                 result.append(name)
         return result
+
+    def _delete_primary_key(self, model, strict=False):
+        constraint_names = self._constraint_names(model, primary_key=True)
+        if strict and len(constraint_names) != 1:
+            raise ValueError('Found wrong number (%s) of PK constraints for %s' % (
+                len(constraint_names),
+                model._meta.db_table,
+            ))
+        for constraint_name in constraint_names:
+            self.execute(self._delete_constraint_sql(self.sql_delete_pk, model, constraint_name))

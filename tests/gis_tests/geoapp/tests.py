@@ -11,14 +11,15 @@ from django.core.management import call_command
 from django.db import connection
 from django.test import TestCase, skipUnlessDBFeature
 
-from ..utils import no_oracle, oracle, postgis, skipUnlessGISLookup, spatialite
+from ..utils import (
+    mysql, no_oracle, oracle, postgis, skipUnlessGISLookup, spatialite,
+)
 from .models import (
     City, Country, Feature, MinusOneSRID, NonConcreteModel, PennsylvaniaCity,
     State, Track,
 )
 
 
-@skipUnlessDBFeature("gis_enabled")
 class GeoModelTest(TestCase):
     fixtures = ['initial']
 
@@ -65,7 +66,7 @@ class GeoModelTest(TestCase):
         nullcity.delete()
 
         # Testing on a Polygon
-        shell = LinearRing((0, 0), (0, 100), (100, 100), (100, 0), (0, 0))
+        shell = LinearRing((0, 0), (0, 90), (100, 90), (100, 0), (0, 0))
         inner = LinearRing((40, 40), (40, 60), (60, 60), (60, 40), (40, 40))
 
         # Creating a State object using a built Polygon
@@ -78,11 +79,10 @@ class GeoModelTest(TestCase):
         self.assertEqual(ply, ns.poly)
 
         # Testing the `ogr` and `srs` lazy-geometry properties.
-        if gdal.HAS_GDAL:
-            self.assertIsInstance(ns.poly.ogr, gdal.OGRGeometry)
-            self.assertEqual(ns.poly.wkb, ns.poly.ogr.wkb)
-            self.assertIsInstance(ns.poly.srs, gdal.SpatialReference)
-            self.assertEqual('WGS 84', ns.poly.srs.name)
+        self.assertIsInstance(ns.poly.ogr, gdal.OGRGeometry)
+        self.assertEqual(ns.poly.wkb, ns.poly.ogr.wkb)
+        self.assertIsInstance(ns.poly.srs, gdal.SpatialReference)
+        self.assertEqual('WGS 84', ns.poly.srs.name)
 
         # Changing the interior ring on the poly attribute.
         new_inner = LinearRing((30, 30), (30, 70), (70, 70), (70, 30), (30, 30))
@@ -222,7 +222,6 @@ class GeoModelTest(TestCase):
             self.assertEqual(feature.geom.srid, g.srid)
 
 
-@skipUnlessDBFeature("gis_enabled")
 class GeoLookupTest(TestCase):
     fixtures = ['initial']
 
@@ -302,9 +301,10 @@ class GeoLookupTest(TestCase):
         invalid_geom = fromstr('POLYGON((0 0, 0 1, 1 1, 1 0, 1 1, 1 0, 0 0))')
         State.objects.create(name='invalid', poly=invalid_geom)
         qs = State.objects.all()
-        if oracle:
+        if oracle or mysql:
             # Kansas has adjacent vertices with distance 6.99244813842e-12
             # which is smaller than the default Oracle tolerance.
+            # It's invalid on MySQL too.
             qs = qs.exclude(name='Kansas')
             self.assertEqual(State.objects.filter(name='Kansas', poly__isvalid=False).count(), 1)
         self.assertEqual(qs.filter(poly__isvalid=False).count(), 1)
@@ -449,7 +449,6 @@ class GeoLookupTest(TestCase):
             self.assertEqual('Lawrence', City.objects.get(point__relate=(ks.poly, intersects_mask)).name)
 
 
-@skipUnlessDBFeature("gis_enabled")
 class GeoQuerySetTest(TestCase):
     # TODO: GeoQuerySet is removed, organize these test better.
     fixtures = ['initial']

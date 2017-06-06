@@ -71,6 +71,7 @@ class OtherTypesArrayModel(PostgreSQLModel):
 
 class HStoreModel(PostgreSQLModel):
     field = HStoreField(blank=True, null=True)
+    array_field = ArrayField(HStoreField(), null=True)
 
 
 class CharFieldModel(models.Model):
@@ -105,6 +106,7 @@ class CITestModel(PostgreSQLModel):
     name = CICharField(primary_key=True, max_length=255)
     email = CIEmailField()
     description = CITextField()
+    array_field = ArrayField(CITextField(), null=True)
 
     def __str__(self):
         return self.name
@@ -171,3 +173,7 @@ class StatTestModel(models.Model):
 
 class NowTestModel(models.Model):
     when = models.DateTimeField(null=True, default=None)
+
+
+class UUIDTestModel(models.Model):
+    uuid = models.UUIDField(default=None, null=True)

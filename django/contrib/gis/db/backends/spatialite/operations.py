@@ -5,8 +5,9 @@ https://www.gaia-gis.it/gaia-sins/spatialite-sql-4.2.1.html
 """
 import re
 
-from django.contrib.gis.db.backends.base.operations import \
-    BaseSpatialOperations
+from django.contrib.gis.db.backends.base.operations import (
+    BaseSpatialOperations,
+)
 from django.contrib.gis.db.backends.spatialite.adapter import SpatiaLiteAdapter
 from django.contrib.gis.db.backends.utils import SpatialOperator
 from django.contrib.gis.db.models import aggregates
@@ -48,8 +49,6 @@ class SpatiaLiteOperations(BaseSpatialOperations, DatabaseOperations):
     select = 'AsText(%s)'
 
     gis_operators = {
-        # Unary predicates
-        'isvalid': SpatialOperator(func='IsValid'),
         # Binary predicates
         'equals': SpatialOperator(func='Equals'),
         'disjoint': SpatialOperator(func='Disjoint'),
@@ -83,6 +82,7 @@ class SpatiaLiteOperations(BaseSpatialOperations, DatabaseOperations):
     def function_names(self):
         return {
             'Length': 'ST_Length',
+            'LineLocatePoint': 'ST_Line_Locate_Point',
             'NumPoints': 'ST_NPoints',
             'Reverse': 'ST_Reverse',
             'Scale': 'ScaleCoords',
@@ -94,7 +94,7 @@ class SpatiaLiteOperations(BaseSpatialOperations, DatabaseOperations):
     def unsupported_functions(self):
         unsupported = {'BoundingCircle', 'ForceRHR', 'MemSize'}
         if not self.lwgeom_version():
-            unsupported |= {'GeoHash', 'IsValid', 'MakeValid'}
+            unsupported |= {'Azimuth', 'GeoHash', 'IsValid', 'MakeValid'}
         return unsupported
 
     @cached_property
@@ -152,32 +152,6 @@ class SpatiaLiteOperations(BaseSpatialOperations, DatabaseOperations):
         else:
             dist_param = value
         return [dist_param]
-
-    def get_geom_placeholder(self, f, value, compiler):
-        """
-        Provide a proper substitution value for Geometries that are not in the
-        SRID of the field.  Specifically, this routine will substitute in the
-        Transform() and GeomFromText() function call(s).
-        """
-        tranform_func = self.spatial_function_name('Transform')
-
-        def transform_value(value, srid):
-            return not (value is None or value.srid == srid)
-        if hasattr(value, 'as_sql'):
-            if transform_value(value, f.srid):
-                placeholder = '%s(%%s, %s)' % (tranform_func, f.srid)
-            else:
-                placeholder = '%s'
-            # No geometry value used for F expression, substitute in
-            # the column name instead.
-            sql, _ = compiler.compile(value)
-            return placeholder % sql
-        else:
-            if transform_value(value, f.srid):
-                # Adding Transform() to the SQL placeholder.
-                return '%s(%s(%%s,%s), %s)' % (tranform_func, self.from_text, value.srid, f.srid)
-            else:
-                return '%s(%%s,%s)' % (self.from_text, f.srid)
 
     def _get_spatialite_func(self, func):
         """

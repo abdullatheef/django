@@ -26,6 +26,11 @@ class cached_property:
         self.name = name or func.__name__
 
     def __get__(self, instance, cls=None):
+        """
+        Call the function and put the return value in instance.__dict__ so that
+        subsequent attribute access on the instance returns the cached value
+        instead of calling cached_property.__get__().
+        """
         if instance is None:
             return self
         res = instance.__dict__[self.name] = self.func(instance)
@@ -77,7 +82,7 @@ def lazy(func, *resultclasses):
         def __prepare_class__(cls):
             for resultclass in resultclasses:
                 for type_ in resultclass.mro():
-                    for method_name in type_.__dict__.keys():
+                    for method_name in type_.__dict__:
                         # All __promise__ return the same wrapper method, they
                         # look up the correct implementation when called.
                         if hasattr(cls, method_name):

@@ -9,8 +9,9 @@
 """
 import re
 
-from django.contrib.gis.db.backends.base.operations import \
-    BaseSpatialOperations
+from django.contrib.gis.db.backends.base.operations import (
+    BaseSpatialOperations,
+)
 from django.contrib.gis.db.backends.oracle.adapter import OracleSpatialAdapter
 from django.contrib.gis.db.backends.utils import SpatialOperator
 from django.contrib.gis.db.models import aggregates
@@ -49,10 +50,6 @@ class SDORelate(SpatialOperator):
     def as_sql(self, connection, lookup, template_params, sql_params):
         template_params['mask'] = sql_params.pop()
         return super().as_sql(connection, lookup, template_params, sql_params)
-
-
-class SDOIsValid(SpatialOperator):
-    sql_template = "%%(func)s(%%(lhs)s, %s) = 'TRUE'" % DEFAULT_TOLERANCE
 
 
 class OracleOperations(BaseSpatialOperations, DatabaseOperations):
@@ -100,7 +97,6 @@ class OracleOperations(BaseSpatialOperations, DatabaseOperations):
         'covers': SDOOperator(func='SDO_COVERS'),
         'disjoint': SDODisjoint(),
         'intersects': SDOOperator(func='SDO_OVERLAPBDYINTERSECT'),  # TODO: Is this really the same as ST_Intersects()?
-        'isvalid': SDOIsValid(func='SDO_GEOM.VALIDATE_GEOMETRY_WITH_CONTEXT'),
         'equals': SDOOperator(func='SDO_EQUAL'),
         'exact': SDOOperator(func='SDO_EQUAL'),
         'overlaps': SDOOperator(func='SDO_OVERLAPS'),
@@ -116,8 +112,9 @@ class OracleOperations(BaseSpatialOperations, DatabaseOperations):
     }
 
     unsupported_functions = {
-        'AsGeoJSON', 'AsKML', 'AsSVG', 'Envelope', 'ForceRHR', 'GeoHash',
-        'MakeValid', 'MemSize', 'Scale', 'SnapToGrid', 'Translate',
+        'AsGeoJSON', 'AsKML', 'AsSVG', 'Azimuth', 'Envelope', 'ForceRHR',
+        'GeoHash', 'LineLocatePoint', 'MakeValid', 'MemSize', 'Scale',
+        'SnapToGrid', 'Translate',
     }
 
     def geo_quote_name(self, name):
@@ -129,8 +126,7 @@ class OracleOperations(BaseSpatialOperations, DatabaseOperations):
         geometry_fields = (
             'PointField', 'GeometryField', 'LineStringField',
             'PolygonField', 'MultiPointField', 'MultiLineStringField',
-            'MultiPolygonField', 'GeometryCollectionField', 'GeomField',
-            'GMLField',
+            'MultiPolygonField', 'GeometryCollectionField',
         )
         if internal_type in geometry_fields:
             converters.append(self.convert_textfield_value)
@@ -192,33 +188,9 @@ class OracleOperations(BaseSpatialOperations, DatabaseOperations):
         return [dist_param]
 
     def get_geom_placeholder(self, f, value, compiler):
-        """
-        Provide a proper substitution value for Geometries that are not in the
-        SRID of the field.  Specifically, this routine will substitute in the
-        SDO_CS.TRANSFORM() function call.
-        """
-        tranform_func = self.spatial_function_name('Transform')
-
         if value is None:
             return 'NULL'
-
-        def transform_value(val, srid):
-            return val.srid != srid
-
-        if hasattr(value, 'as_sql'):
-            if transform_value(value, f.srid):
-                placeholder = '%s(%%s, %s)' % (tranform_func, f.srid)
-            else:
-                placeholder = '%s'
-            # No geometry value used for F expression, substitute in
-            # the column name instead.
-            sql, _ = compiler.compile(value)
-            return placeholder % sql
-        else:
-            if transform_value(value, f.srid):
-                return '%s(SDO_GEOMETRY(%%s, %s), %s)' % (tranform_func, value.srid, f.srid)
-            else:
-                return 'SDO_GEOMETRY(%%s, %s)' % f.srid
+        return super().get_geom_placeholder(f, value, compiler)
 
     def spatial_aggregate_name(self, agg_name):
         """

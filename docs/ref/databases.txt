@@ -189,6 +189,41 @@ cursor query is controlled with the `cursor_tuple_fraction`_ option.
 
 .. _cursor_tuple_fraction: https://www.postgresql.org/docs/current/static/runtime-config-query.html#GUC-CURSOR-TUPLE-FRACTION
 
+.. _transaction-pooling-server-side-cursors:
+
+Transaction pooling and server-side cursors
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. versionadded:: 1.11.1
+
+Using a connection pooler in transaction pooling mode (e.g. `pgBouncer`_)
+requires disabling server-side cursors for that connection.
+
+Server-side cursors are local to a connection and remain open at the end of a
+transaction when :setting:`AUTOCOMMIT <DATABASE-AUTOCOMMIT>` is ``True``. A
+subsequent transaction may attempt to fetch more results from a server-side
+cursor. In transaction pooling mode, there's no guarantee that subsequent
+transactions will use the same connection. If a different connection is used,
+an error is raised when the transaction references the server-side cursor,
+because server-side cursors are only accessible in the connection in which they
+were created.
+
+One solution is to disable server-side cursors for a connection in
+:setting:`DATABASES` by setting :setting:`DISABLE_SERVER_SIDE_CURSORS
+<DATABASE-DISABLE_SERVER_SIDE_CURSORS>` to ``True``.
+
+To benefit from server-side cursors in transaction pooling mode, you could set
+up :doc:`another connection to the database </topics/db/multi-db>` in order to
+perform queries that use server-side cursors. This connection needs to either
+be directly to the database or to a connection pooler in session pooling mode.
+
+Another option is to wrap each ``QuerySet`` using server-side cursors in an
+:func:`~django.db.transaction.atomic` block, because it disables ``autocommit``
+for the duration of the transaction. This way, the server-side cursor will only
+live for the duration of the transaction.
+
+.. _pgBouncer: https://pgbouncer.github.io/
+
 Test database templates
 -----------------------
 
@@ -408,7 +443,7 @@ Several other `MySQLdb connection options`_ may be useful, such as ``ssl``,
 ``init_command``, and ``sql_mode``.
 
 .. _MySQL option file: https://dev.mysql.com/doc/refman/en/option-files.html
-.. _MySQLdb connection options: https://mysqlclient.readthedocs.io/en/latest/user_guide.html#functions-and-attributes
+.. _MySQLdb connection options: https://mysqlclient.readthedocs.io/user_guide.html#functions-and-attributes
 
 .. _mysql-sql-mode:
 
@@ -569,7 +604,8 @@ Row locking with ``QuerySet.select_for_update()``
 
 MySQL does not support the ``NOWAIT`` and ``SKIP LOCKED`` options to the
 ``SELECT ... FOR UPDATE`` statement. If ``select_for_update()`` is used with
-``nowait=True`` or ``skip_locked=True`` then a ``DatabaseError`` will be raised.
+``nowait=True`` or ``skip_locked=True``, then a
+:exc:`~django.db.NotSupportedError` is raised.
 
 Automatic typecasting can cause unexpected results
 --------------------------------------------------
@@ -685,8 +721,8 @@ Oracle notes
 Django supports `Oracle Database Server`_ versions 12.1 and higher. Version
 5.2 or higher of the `cx_Oracle`_ Python driver is required.
 
-.. _`Oracle Database Server`: http://www.oracle.com/
-.. _`cx_Oracle`: http://cx-oracle.sourceforge.net/
+.. _`Oracle Database Server`: https://www.oracle.com/
+.. _`cx_Oracle`: https://oracle.github.io/python-cx_Oracle/
 
 In order for the ``python manage.py migrate`` command to work, your Oracle
 database user must have privileges to run the following commands:

@@ -55,7 +55,7 @@ ADDRESS_HEADERS = {
 def forbid_multi_line_headers(name, val, encoding):
     """Forbid multi-line headers to prevent header injection."""
     encoding = encoding or settings.DEFAULT_CHARSET
-    val = force_text(val)
+    val = str(val)  # val may be lazy
     if '\n' in val or '\r' in val:
         raise BadHeaderError("Header values can't contain newlines (got %r for header %r)" % (val, name))
     try:
@@ -100,7 +100,7 @@ def sanitize_address(addr, encoding):
     Format a pair of (name, address) or an email address string.
     """
     if not isinstance(addr, tuple):
-        addr = parseaddr(force_text(addr))
+        addr = parseaddr(addr)
     nm, addr = addr
     localpart, domain = None, None
     nm = Header(nm, encoding).encode()
@@ -204,10 +204,6 @@ class EmailMessage:
         """
         Initialize a single email message (which can be sent to multiple
         recipients).
-
-        All string arguments used to create the message can be strings
-        or UTF-8 bytestrings. The SafeMIMEText class will handle any
-        necessary encoding conversions.
         """
         if to:
             if isinstance(to, str):
@@ -236,7 +232,13 @@ class EmailMessage:
         self.from_email = from_email or settings.DEFAULT_FROM_EMAIL
         self.subject = subject
         self.body = body
-        self.attachments = attachments or []
+        self.attachments = []
+        if attachments:
+            for attachment in attachments:
+                if isinstance(attachment, MIMEBase):
+                    self.attach(attachment)
+                else:
+                    self.attach(*attachment)
         self.extra_headers = headers or {}
         self.connection = connection
 
@@ -252,11 +254,11 @@ class EmailMessage:
         msg = self._create_message(msg)
         msg['Subject'] = self.subject
         msg['From'] = self.extra_headers.get('From', self.from_email)
-        msg['To'] = self.extra_headers.get('To', ', '.join(map(force_text, self.to)))
+        msg['To'] = self.extra_headers.get('To', ', '.join(map(str, self.to)))
         if self.cc:
-            msg['Cc'] = ', '.join(map(force_text, self.cc))
+            msg['Cc'] = ', '.join(str(cc) for cc in self.cc)
         if self.reply_to:
-            msg['Reply-To'] = self.extra_headers.get('Reply-To', ', '.join(map(force_text, self.reply_to)))
+            msg['Reply-To'] = self.extra_headers.get('Reply-To', ', '.join(str(r) for r in self.reply_to))
 
         # Email header names are case-insensitive (RFC 2045), so we have to
         # accommodate that when doing comparisons.
@@ -381,7 +383,7 @@ class EmailMessage:
             elif not isinstance(content, Message):
                 # For compatibility with existing code, parse the message
                 # into an email.Message object if it is not one already.
-                content = message_from_string(content)
+                content = message_from_string(force_text(content))
 
             attachment = SafeMIMEMessage(content, subtype)
         else:
@@ -421,10 +423,6 @@ class EmailMultiAlternatives(EmailMessage):
         """
         Initialize a single email message (which can be sent to multiple
         recipients).
-
-        All string arguments used to create the message can be strings or UTF-8
-        bytestrings. The SafeMIMEText class will handle any necessary encoding
-        conversions.
         """
         super().__init__(
             subject, body, from_email, to, bcc, connection, attachments,

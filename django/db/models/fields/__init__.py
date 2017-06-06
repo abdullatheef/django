@@ -25,7 +25,7 @@ from django.utils.dateparse import (
     parse_date, parse_datetime, parse_duration, parse_time,
 )
 from django.utils.duration import duration_string
-from django.utils.encoding import force_bytes, force_text, smart_text
+from django.utils.encoding import force_bytes, smart_text
 from django.utils.functional import Promise, cached_property, curry
 from django.utils.ipv6 import clean_ipv6_address
 from django.utils.itercompat import is_iterable
@@ -514,7 +514,11 @@ class Field(RegisterLookupMixin):
             # instance. The code below will create a new empty instance of
             # class self.__class__, then update its dict with self.__dict__
             # values - so, this is very close to normal pickle.
-            return _empty, (self.__class__,), self.__dict__
+            state = self.__dict__.copy()
+            # The _get_default cached_property can't be pickled due to lambda
+            # usage.
+            state.pop('_get_default', None)
+            return _empty, (self.__class__,), state
         return _load_field, (self.model._meta.app_label, self.model._meta.object_name,
                              self.name)
 
@@ -795,7 +799,7 @@ class Field(RegisterLookupMixin):
                    for x in rel_model._default_manager.complex_filter(
                        limit_choices_to)]
         else:
-            lst = [(x._get_pk_val(), smart_text(x))
+            lst = [(x.pk, smart_text(x))
                    for x in rel_model._default_manager.complex_filter(
                        limit_choices_to)]
         return first_choice + lst
@@ -805,7 +809,7 @@ class Field(RegisterLookupMixin):
         Return a string value of this field from the passed obj.
         This is used by the serialization framework.
         """
-        return force_text(self.value_from_object(obj))
+        return str(self.value_from_object(obj))
 
     def _get_flatchoices(self):
         """Flattened version of choices tuple."""
@@ -850,7 +854,7 @@ class Field(RegisterLookupMixin):
             for k in list(kwargs):
                 if k not in ('coerce', 'empty_value', 'choices', 'required',
                              'widget', 'label', 'initial', 'help_text',
-                             'error_messages', 'show_hidden_initial'):
+                             'error_messages', 'show_hidden_initial', 'disabled'):
                     del kwargs[k]
         defaults.update(kwargs)
         if form_class is None:
@@ -1040,7 +1044,8 @@ class CharField(Field):
                     id='fields.E120',
                 )
             ]
-        elif not isinstance(self.max_length, int) or self.max_length <= 0:
+        elif (not isinstance(self.max_length, int) or isinstance(self.max_length, bool) or
+                self.max_length <= 0):
             return [
                 checks.Error(
                     "'max_length' must be a positive integer.",
@@ -1057,7 +1062,7 @@ class CharField(Field):
     def to_python(self, value):
         if isinstance(value, str) or value is None:
             return value
-        return force_text(value)
+        return str(value)
 
     def get_prep_value(self, value):
         value = super().get_prep_value(value)
@@ -1507,6 +1512,10 @@ class DecimalField(Field):
             validators.DecimalValidator(self.max_digits, self.decimal_places)
         ]
 
+    @cached_property
+    def context(self):
+        return decimal.Context(prec=self.max_digits)
+
     def deconstruct(self):
         name, path, args, kwargs = super().deconstruct()
         if self.max_digits is not None:
@@ -1521,6 +1530,8 @@ class DecimalField(Field):
     def to_python(self, value):
         if value is None:
             return value
+        if isinstance(value, float):
+            return self.context.create_decimal_from_float(value)
         try:
             return decimal.Decimal(value)
         except decimal.InvalidOperation:
@@ -1919,7 +1930,7 @@ class GenericIPAddressField(Field):
         if value is None:
             return None
         if not isinstance(value, str):
-            value = force_text(value)
+            value = str(value)
         value = value.strip()
         if ':' in value:
             return clean_ipv6_address(value, self.unpack_ipv4, self.error_messages['invalid'])
@@ -2088,7 +2099,7 @@ class TextField(Field):
     def to_python(self, value):
         if isinstance(value, str) or value is None:
             return value
-        return force_text(value)
+        return str(value)
 
     def get_prep_value(self, value):
         value = super().get_prep_value(value)

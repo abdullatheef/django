@@ -55,6 +55,10 @@ class DatabaseWrapperTests(SimpleTestCase):
             instance_attr_value = getattr(conn, instance_attr_name)
             self.assertIsInstance(instance_attr_value, class_attr_value)
 
+    def test_initialization_display_name(self):
+        self.assertEqual(BaseDatabaseWrapper.display_name, 'unknown')
+        self.assertNotEqual(connection.display_name, 'unknown')
+
 
 class DummyBackendTest(SimpleTestCase):
 
@@ -751,7 +755,7 @@ class BackendTestCase(TransactionTestCase):
 
         self.assertIsInstance(connection.queries, list)
         self.assertIsInstance(connection.queries[0], dict)
-        self.assertCountEqual(connection.queries[0].keys(), ['sql', 'time'])
+        self.assertCountEqual(connection.queries[0], ['sql', 'time'])
 
         reset_queries()
         self.assertEqual(0, len(connection.queries))
@@ -966,9 +970,7 @@ class ThreadTests(TransactionTestCase):
             t.start()
             t.join()
         # Each created connection got different inner connection.
-        self.assertEqual(
-            len(set(conn.connection for conn in connections_dict.values())),
-            3)
+        self.assertEqual(len({conn.connection for conn in connections_dict.values()}), 3)
         # Finish by closing the connections opened by the other threads (the
         # connection opened in the main thread will automatically be closed on
         # teardown).

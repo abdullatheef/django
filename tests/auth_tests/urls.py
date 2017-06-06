@@ -62,7 +62,7 @@ def userpage(request):
     pass
 
 
-uid_token = '(?P<uidb64>[0-9A-Za-z_\-]+)/(?P<token>[0-9A-Za-z]{1,13}-[0-9A-Za-z]{1,20})'
+uid_token = r'(?P<uidb64>[0-9A-Za-z_\-]+)/(?P<token>[0-9A-Za-z]{1,13}-[0-9A-Za-z]{1,20})'
 
 # special urls for auth test cases
 urlpatterns = auth_urlpatterns + [
@@ -75,7 +75,7 @@ urlpatterns = auth_urlpatterns + [
     url(r'^password_reset_from_email/$',
         views.PasswordResetView.as_view(from_email='staffmember@example.com')),
     url(r'^password_reset_extra_email_context/$',
-        views.PasswordResetView.as_view(extra_email_context=dict(greeting='Hello!'))),
+        views.PasswordResetView.as_view(extra_email_context={'greeting': 'Hello!'})),
     url(r'^password_reset/custom_redirect/$',
         views.PasswordResetView.as_view(success_url='/custom/')),
     url(r'^password_reset/custom_redirect/named/$',

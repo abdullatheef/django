@@ -5,7 +5,6 @@ from urllib.parse import urlsplit, urlunsplit
 
 from django.core.exceptions import ValidationError
 from django.utils.deconstruct import deconstructible
-from django.utils.encoding import force_text
 from django.utils.functional import SimpleLazyObject
 from django.utils.ipv6 import is_valid_ipv6_address
 from django.utils.translation import gettext_lazy as _, ngettext_lazy
@@ -52,11 +51,12 @@ class RegexValidator:
 
     def __call__(self, value):
         """
-        Validate that the input contains a match for the regular expression
-        if inverse_match is False, otherwise raise ValidationError.
+        Validate that the input contains (or does *not* contain, if
+        inverse_match is True) a match for the regular expression.
         """
-        if not (self.inverse_match is not bool(self.regex.search(
-                force_text(value)))):
+        regex_matches = bool(self.regex.search(str(value)))
+        invalid_input = regex_matches if self.inverse_match else not regex_matches
+        if invalid_input:
             raise ValidationError(self.message, code=self.code)
 
     def __eq__(self, other):
@@ -234,6 +234,7 @@ validate_email = EmailValidator()
 slug_re = _lazy_re_compile(r'^[-a-zA-Z0-9_]+\Z')
 validate_slug = RegexValidator(
     slug_re,
+    # Translators: "letters" means latin letters: a-z and A-Z.
     _("Enter a valid 'slug' consisting of letters, numbers, underscores or hyphens."),
     'invalid'
 )
@@ -494,7 +495,7 @@ def get_available_image_extensions():
         return []
     else:
         Image.init()
-        return [ext.lower()[1:] for ext in Image.EXTENSION.keys()]
+        return [ext.lower()[1:] for ext in Image.EXTENSION]
 
 
 validate_image_file_extension = FileExtensionValidator(

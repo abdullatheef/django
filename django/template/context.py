@@ -70,7 +70,7 @@ class BaseContext:
         """
         context = self.dicts[-1]
         for d in reversed(self.dicts):
-            if key in d.keys():
+            if key in d:
                 context = d
                 break
         context[key] = value
@@ -203,15 +203,17 @@ class RenderContext(BaseContext):
         return self.dicts[-1][key]
 
     @contextmanager
-    def push_state(self, template):
+    def push_state(self, template, isolated_context=True):
         initial = self.template
         self.template = template
-        self.push()
+        if isolated_context:
+            self.push()
         try:
             yield
         finally:
             self.template = initial
-            self.pop()
+            if isolated_context:
+                self.pop()
 
 
 class RequestContext(Context):

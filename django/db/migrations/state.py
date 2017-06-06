@@ -224,7 +224,7 @@ class ProjectState:
         return cls(app_models)
 
     def __eq__(self, other):
-        if set(self.models.keys()) != set(other.models.keys()):
+        if set(self.models) != set(other.models):
             return False
         if set(self.real_apps) != set(other.real_apps):
             return False
@@ -446,7 +446,8 @@ class ModelState:
                 elif name == "indexes":
                     indexes = [idx.clone() for idx in model._meta.indexes]
                     for index in indexes:
-                        index.set_name_with_model(model)
+                        if not index.name:
+                            index.set_name_with_model(model)
                     options['indexes'] = indexes
                 else:
                     options[name] = model._meta.original_attrs[name]
@@ -545,6 +546,9 @@ class ModelState:
             app_label=self.app_label,
             name=self.name,
             fields=list(self.fields),
+            # Since options are shallow-copied here, operations such as
+            # AddIndex must replace their option (e.g 'indexes') rather
+            # than mutating it.
             options=dict(self.options),
             bases=self.bases,
             managers=list(self.managers),
@@ -555,7 +559,7 @@ class ModelState:
         # First, make a Meta object
         meta_contents = {'app_label': self.app_label, "apps": apps}
         meta_contents.update(self.options)
-        meta = type("Meta", tuple(), meta_contents)
+        meta = type("Meta", (), meta_contents)
         # Then, work out our bases
         try:
             bases = tuple(

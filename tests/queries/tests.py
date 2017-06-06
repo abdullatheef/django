@@ -22,11 +22,11 @@ from .models import (
     Note, NullableName, Number, ObjectA, ObjectB, ObjectC, OneToOneCategory,
     Order, OrderItem, Page, Paragraph, Person, Plaything, PointerA, Program,
     ProxyCategory, ProxyObjectA, ProxyObjectB, Ranking, Related,
-    RelatedIndividual, RelatedObject, Report, ReservedName, Responsibility,
-    School, SharedConnection, SimpleCategory, SingleObject, SpecialCategory,
-    Staff, StaffUser, Student, Tag, Task, Teacher, Ticket21203Child,
-    Ticket21203Parent, Ticket23605A, Ticket23605B, Ticket23605C, TvChef, Valid,
-    X,
+    RelatedIndividual, RelatedObject, Report, ReportComment, ReservedName,
+    Responsibility, School, SharedConnection, SimpleCategory, SingleObject,
+    SpecialCategory, Staff, StaffUser, Student, Tag, Task, Teacher,
+    Ticket21203Child, Ticket21203Parent, Ticket23605A, Ticket23605B,
+    Ticket23605C, TvChef, Valid, X,
 )
 
 
@@ -550,7 +550,7 @@ class Queries1Tests(TestCase):
         # normal. A normal dict would thus fail.)
         s = [('a', '%s'), ('b', '%s')]
         params = ['one', 'two']
-        if {'a': 1, 'b': 2}.keys() == ['a', 'b']:
+        if list({'a': 1, 'b': 2}) == ['a', 'b']:
             s.reverse()
             params.reverse()
 
@@ -731,10 +731,10 @@ class Queries1Tests(TestCase):
                 q.extra(select={'foo': "1"}),
                 []
             )
+            self.assertQuerysetEqual(q.reverse(), [])
             q.query.low_mark = 1
             with self.assertRaisesMessage(AssertionError, 'Cannot change a query once a slice has been taken'):
                 q.extra(select={'foo': "1"})
-            self.assertQuerysetEqual(q.reverse(), [])
             self.assertQuerysetEqual(q.defer('meal'), [])
             self.assertQuerysetEqual(q.only('meal'), [])
 
@@ -2005,10 +2005,10 @@ class QuerysetOrderedTests(unittest.TestCase):
 class SubqueryTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        DumbCategory.objects.create(id=1)
-        DumbCategory.objects.create(id=2)
-        DumbCategory.objects.create(id=3)
-        DumbCategory.objects.create(id=4)
+        NamedCategory.objects.create(id=1, name='first')
+        NamedCategory.objects.create(id=2, name='second')
+        NamedCategory.objects.create(id=3, name='third')
+        NamedCategory.objects.create(id=4, name='fourth')
 
     def test_ordered_subselect(self):
         "Subselects honor any manual ordering"
@@ -2063,6 +2063,28 @@ class SubqueryTests(TestCase):
 
         DumbCategory.objects.filter(id__in=DumbCategory.objects.order_by('-id')[1:]).delete()
         self.assertEqual(set(DumbCategory.objects.values_list('id', flat=True)), {3})
+
+    def test_distinct_ordered_sliced_subquery(self):
+        # Implicit values('id').
+        self.assertSequenceEqual(
+            NamedCategory.objects.filter(
+                id__in=NamedCategory.objects.distinct().order_by('name')[0:2],
+            ).order_by('name').values_list('name', flat=True), ['first', 'fourth']
+        )
+        # Explicit values('id').
+        self.assertSequenceEqual(
+            NamedCategory.objects.filter(
+                id__in=NamedCategory.objects.distinct().order_by('-name').values('id')[0:2],
+            ).order_by('name').values_list('name', flat=True), ['second', 'third']
+        )
+        # Annotated value.
+        self.assertSequenceEqual(
+            DumbCategory.objects.filter(
+                id__in=DumbCategory.objects.annotate(
+                    double_id=F('id') * 2
+                ).order_by('id').distinct().values('double_id')[0:2],
+            ).order_by('id').values_list('id', flat=True), [2, 4]
+        )
 
 
 class CloneTests(TestCase):
@@ -2406,6 +2428,18 @@ class ToFieldTests(TestCase):
             {apple}
         )
 
+    def test_nested_in_subquery(self):
+        extra = ExtraInfo.objects.create()
+        author = Author.objects.create(num=42, extra=extra)
+        report = Report.objects.create(creator=author)
+        comment = ReportComment.objects.create(report=report)
+        comments = ReportComment.objects.filter(
+            report__in=Report.objects.filter(
+                creator__in=extra.author_set.all(),
+            ),
+        )
+        self.assertSequenceEqual(comments, [comment])
+
     def test_reverse_in(self):
         apple = Food.objects.create(name="apple")
         pear = Food.objects.create(name="pear")
@@ -2523,32 +2557,17 @@ class ConditionalTests(TestCase):
         self.assertEqual(sql.find(fragment, pos + 1), -1)
         self.assertEqual(sql.find("NULL", pos + len(fragment)), pos + len(fragment))
 
-    # Sqlite 3 does not support passing in more than 1000 parameters except by
-    # changing a parameter at compilation time.
-    @skipUnlessDBFeature('supports_1000_query_parameters')
-    def test_ticket14244(self):
+    def test_in_list_limit(self):
         # The "in" lookup works with lists of 1000 items or more.
         # The numbers amount is picked to force three different IN batches
         # for Oracle, yet to be less than 2100 parameter limit for MSSQL.
         numbers = list(range(2050))
-        Number.objects.all().delete()
-        Number.objects.bulk_create(Number(num=num) for num in numbers)
-        self.assertEqual(
-            Number.objects.filter(num__in=numbers[:1000]).count(),
-            1000
-        )
-        self.assertEqual(
-            Number.objects.filter(num__in=numbers[:1001]).count(),
-            1001
-        )
-        self.assertEqual(
-            Number.objects.filter(num__in=numbers[:2000]).count(),
-            2000
-        )
-        self.assertEqual(
-            Number.objects.filter(num__in=numbers).count(),
-            len(numbers)
-        )
+        max_query_params = connection.features.max_query_params
+        if max_query_params is None or max_query_params >= len(numbers):
+            Number.objects.bulk_create(Number(num=num) for num in numbers)
+            for number in [1000, 1001, 2000, len(numbers)]:
+                with self.subTest(number=number):
+                    self.assertEqual(Number.objects.filter(num__in=numbers[:number]).count(), number)
 
 
 class UnionTests(unittest.TestCase):

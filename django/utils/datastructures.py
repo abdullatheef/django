@@ -24,7 +24,7 @@ class OrderedSet:
             pass
 
     def __iter__(self):
-        return iter(self.dict.keys())
+        return iter(self.dict)
 
     def __contains__(self, item):
         return item in self.dict
@@ -76,7 +76,7 @@ class MultiValueDict(dict):
         try:
             list_ = super().__getitem__(key)
         except KeyError:
-            raise MultiValueDictKeyError(repr(key))
+            raise MultiValueDictKeyError(key)
         try:
             return list_[-1]
         except IndexError:
@@ -91,9 +91,7 @@ class MultiValueDict(dict):
             for k, v in self.lists()
         ])
 
-    def __deepcopy__(self, memo=None):
-        if memo is None:
-            memo = {}
+    def __deepcopy__(self, memo):
         result = self.__class__()
         memo[id(self)] = result
         for key, value in dict.items(self):

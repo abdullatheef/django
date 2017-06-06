@@ -29,18 +29,15 @@ class ComplexMultiWidget(MultiWidget):
             ]
         return [None, None, None]
 
-    def format_output(self, rendered_widgets):
-        return '\n'.join(rendered_widgets)
-
 
 class ComplexField(MultiValueField):
-    def __init__(self, required=True, widget=None, label=None, initial=None):
+    def __init__(self, **kwargs):
         fields = (
             CharField(),
             MultipleChoiceField(choices=beatles),
             SplitDateTimeField(),
         )
-        super().__init__(fields, required, widget, label, initial)
+        super().__init__(fields, **kwargs)
 
     def compress(self, data_list):
         if data_list:

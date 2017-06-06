@@ -1,6 +1,7 @@
 from django.contrib.gis.db.backends.base.adapter import WKTAdapter
-from django.contrib.gis.db.backends.base.operations import \
-    BaseSpatialOperations
+from django.contrib.gis.db.backends.base.operations import (
+    BaseSpatialOperations,
+)
 from django.contrib.gis.db.backends.utils import SpatialOperator
 from django.contrib.gis.db.models import GeometryField, aggregates
 from django.db.backends.mysql.operations import DatabaseOperations
@@ -72,29 +73,19 @@ class MySQLOperations(BaseSpatialOperations, DatabaseOperations):
     @cached_property
     def unsupported_functions(self):
         unsupported = {
-            'AsGeoJSON', 'AsGML', 'AsKML', 'AsSVG', 'BoundingCircle',
-            'ForceRHR', 'GeoHash', 'IsValid', 'MakeValid', 'MemSize',
-            'Perimeter', 'PointOnSurface', 'Reverse', 'Scale', 'SnapToGrid',
-            'Transform', 'Translate',
+            'AsGML', 'AsKML', 'AsSVG', 'Azimuth', 'BoundingCircle', 'ForceRHR',
+            'LineLocatePoint', 'MakeValid', 'MemSize', 'Perimeter',
+            'PointOnSurface', 'Reverse', 'Scale', 'SnapToGrid', 'Transform',
+            'Translate',
         }
+        if self.connection.mysql_version < (5, 7, 5):
+            unsupported.update({'AsGeoJSON', 'GeoHash', 'IsValid'})
         if self.is_mysql_5_5:
             unsupported.update({'Difference', 'Distance', 'Intersection', 'SymDifference', 'Union'})
         return unsupported
 
     def geo_db_type(self, f):
         return f.geom_type
-
-    def get_geom_placeholder(self, f, value, compiler):
-        """
-        The placeholder here has to include MySQL's WKT constructor.  Because
-        MySQL does not support spatial transformations, there is no need to
-        modify the placeholder based on the contents of the given value.
-        """
-        if hasattr(value, 'as_sql'):
-            placeholder, _ = compiler.compile(value)
-        else:
-            placeholder = '%s(%%s)' % self.from_text
-        return placeholder
 
     def get_db_converters(self, expression):
         converters = super().get_db_converters(expression)

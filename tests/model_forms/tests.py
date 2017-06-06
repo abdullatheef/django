@@ -32,7 +32,7 @@ from .models import (
 )
 
 if test_images:
-    from .models import ImageFile, OptionalImageFile
+    from .models import ImageFile, OptionalImageFile, NoExtensionImageFile
 
     class ImageFileForm(forms.ModelForm):
         class Meta:
@@ -42,6 +42,11 @@ if test_images:
     class OptionalImageFileForm(forms.ModelForm):
         class Meta:
             model = OptionalImageFile
+            fields = '__all__'
+
+    class NoExtensionImageFileForm(forms.ModelForm):
+        class Meta:
+            model = NoExtensionImageFile
             fields = '__all__'
 
 
@@ -608,6 +613,22 @@ class ModelFormBaseTest(TestCase):
 
         # Empty data doesn't use the model default because an unchecked
         # CheckboxSelectMultiple doesn't have a value in HTML form submission.
+        mf1 = PubForm({})
+        self.assertEqual(mf1.errors, {})
+        m1 = mf1.save(commit=False)
+        self.assertEqual(m1.mode, '')
+        self.assertEqual(m1._meta.get_field('mode').get_default(), 'di')
+
+    def test_default_not_populated_on_selectmultiple(self):
+        class PubForm(forms.ModelForm):
+            mode = forms.CharField(required=False, widget=forms.SelectMultiple)
+
+            class Meta:
+                model = PublicationDefaults
+                fields = ('mode',)
+
+        # Empty data doesn't use the model default because an unselected
+        # SelectMultiple doesn't have a value in HTML form submission.
         mf1 = PubForm({})
         self.assertEqual(mf1.errors, {})
         m1 = mf1.save(commit=False)
@@ -1640,6 +1661,17 @@ class ModelChoiceFieldTests(TestCase):
         form2 = ModelChoiceForm()
         self.assertIsNone(form2.fields['category'].queryset._result_cache)
 
+    def test_modelchoicefield_queryset_none(self):
+        class ModelChoiceForm(forms.Form):
+            category = forms.ModelChoiceField(queryset=None)
+
+            def __init__(self, *args, **kwargs):
+                super(ModelChoiceForm, self).__init__(*args, **kwargs)
+                self.fields['category'].queryset = Category.objects.filter(slug__contains='test')
+
+        form = ModelChoiceForm()
+        self.assertCountEqual(form.fields['category'].queryset, [self.c2, self.c3])
+
     def test_modelchoicefield_22745(self):
         """
         #22745 -- Make sure that ModelChoiceField with RadioSelect widget
@@ -2434,6 +2466,19 @@ class FileAndImageFieldTests(TestCase):
         self.assertEqual(instance.image.name, 'foo/test4.png')
         instance.delete()
 
+        # Editing an instance that has an image without an extension shouldn't
+        # fail validation. First create:
+        f = NoExtensionImageFileForm(
+            data={'description': 'An image'},
+            files={'image': SimpleUploadedFile('test.png', image_data)},
+        )
+        self.assertTrue(f.is_valid())
+        instance = f.save()
+        self.assertEqual(instance.image.name, 'tests/no_extension')
+        # Then edit:
+        f = NoExtensionImageFileForm(data={'description': 'Edited image'}, instance=instance)
+        self.assertTrue(f.is_valid())
+
 
 class ModelOtherFieldTests(SimpleTestCase):
     def test_big_integer_field(self):
@@ -2756,7 +2801,7 @@ class ModelFormInheritanceTests(SimpleTestCase):
                 model = Writer
                 fields = '__all__'
 
-        self.assertEqual(list(ModelForm().fields.keys()), ['name', 'age'])
+        self.assertEqual(list(ModelForm().fields), ['name', 'age'])
 
     def test_field_removal(self):
         class ModelForm(forms.ModelForm):
@@ -2773,13 +2818,13 @@ class ModelFormInheritanceTests(SimpleTestCase):
         class Form2(forms.Form):
             foo = forms.IntegerField()
 
-        self.assertEqual(list(ModelForm().fields.keys()), ['name'])
-        self.assertEqual(list(type('NewForm', (Mixin, Form), {})().fields.keys()), [])
-        self.assertEqual(list(type('NewForm', (Form2, Mixin, Form), {})().fields.keys()), ['foo'])
-        self.assertEqual(list(type('NewForm', (Mixin, ModelForm, Form), {})().fields.keys()), ['name'])
-        self.assertEqual(list(type('NewForm', (ModelForm, Mixin, Form), {})().fields.keys()), ['name'])
-        self.assertEqual(list(type('NewForm', (ModelForm, Form, Mixin), {})().fields.keys()), ['name', 'age'])
-        self.assertEqual(list(type('NewForm', (ModelForm, Form), {'age': None})().fields.keys()), ['name'])
+        self.assertEqual(list(ModelForm().fields), ['name'])
+        self.assertEqual(list(type('NewForm', (Mixin, Form), {})().fields), [])
+        self.assertEqual(list(type('NewForm', (Form2, Mixin, Form), {})().fields), ['foo'])
+        self.assertEqual(list(type('NewForm', (Mixin, ModelForm, Form), {})().fields), ['name'])
+        self.assertEqual(list(type('NewForm', (ModelForm, Mixin, Form), {})().fields), ['name'])
+        self.assertEqual(list(type('NewForm', (ModelForm, Form, Mixin), {})().fields), ['name', 'age'])
+        self.assertEqual(list(type('NewForm', (ModelForm, Form), {'age': None})().fields), ['name'])
 
     def test_field_removal_name_clashes(self):
         """
@@ -2947,7 +2992,7 @@ class FormFieldCallbackTests(SimpleTestCase):
         class InheritedForm(NewForm):
             pass
 
-        for name in NewForm.base_fields.keys():
+        for name in NewForm.base_fields:
             self.assertEqual(
                 type(InheritedForm.base_fields[name].widget),
                 type(NewForm.base_fields[name].widget)

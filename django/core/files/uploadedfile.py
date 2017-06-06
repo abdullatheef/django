@@ -58,7 +58,8 @@ class TemporaryUploadedFile(UploadedFile):
     A file uploaded to a temporary location (i.e. stream-to-disk).
     """
     def __init__(self, name, content_type, size, charset, content_type_extra=None):
-        file = tempfile.NamedTemporaryFile(suffix='.upload', dir=settings.FILE_UPLOAD_TEMP_DIR)
+        _, ext = os.path.splitext(name)
+        file = tempfile.NamedTemporaryFile(suffix='.upload' + ext, dir=settings.FILE_UPLOAD_TEMP_DIR)
         super().__init__(file, name, content_type, size, charset, content_type_extra)
 
     def temporary_file_path(self):
@@ -85,6 +86,7 @@ class InMemoryUploadedFile(UploadedFile):
 
     def open(self, mode=None):
         self.file.seek(0)
+        return self
 
     def chunks(self, chunk_size=None):
         self.file.seek(0)

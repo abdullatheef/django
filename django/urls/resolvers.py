@@ -16,7 +16,6 @@ from django.core.checks import Warning
 from django.core.checks.urls import check_resolver
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.datastructures import MultiValueDict
-from django.utils.encoding import force_text
 from django.utils.functional import cached_property
 from django.utils.http import RFC3986_SUBDELIMS
 from django.utils.regex_helper import normalize
@@ -42,10 +41,10 @@ class ResolverMatch:
 
         if not hasattr(func, '__name__'):
             # A class-based view
-            self._func_path = '.'.join([func.__class__.__module__, func.__class__.__name__])
+            self._func_path = func.__class__.__module__ + '.' + func.__class__.__name__
         else:
             # A function-based view
-            self._func_path = '.'.join([func.__module__, func.__name__])
+            self._func_path = func.__module__ + '.' + func.__name__
 
         view_path = url_name or self._func_path
         self.view_name = ':'.join(self.namespaces + [view_path])
@@ -92,7 +91,7 @@ class LocaleRegexDescriptor:
             return instance.__dict__['regex']
         language_code = get_language()
         if language_code not in instance._regex_dict:
-            instance._regex_dict[language_code] = self._compile(force_text(instance._regex))
+            instance._regex_dict[language_code] = self._compile(str(instance._regex))
         return instance._regex_dict[language_code]
 
     def _compile(self, regex):
@@ -347,7 +346,7 @@ class RegexURLResolver(LocaleRegexProvider):
         return name in self._callback_strs
 
     def resolve(self, path):
-        path = force_text(path)  # path may be a reverse_lazy object
+        path = str(path)  # path may be a reverse_lazy object
         tried = []
         match = self.regex.search(path)
         if match:
@@ -422,8 +421,8 @@ class RegexURLResolver(LocaleRegexProvider):
     def _reverse_with_prefix(self, lookup_view, _prefix, *args, **kwargs):
         if args and kwargs:
             raise ValueError("Don't mix *args and **kwargs in call to reverse()!")
-        text_args = [force_text(v) for v in args]
-        text_kwargs = {k: force_text(v) for (k, v) in kwargs.items()}
+        text_args = [str(v) for v in args]
+        text_kwargs = {k: str(v) for (k, v) in kwargs.items()}
 
         if not self._populated:
             self._populate()
@@ -437,8 +436,7 @@ class RegexURLResolver(LocaleRegexProvider):
                         continue
                     candidate_subs = dict(zip(params, text_args))
                 else:
-                    if (set(kwargs.keys()) | set(defaults.keys()) != set(params) |
-                            set(defaults.keys())):
+                    if set(kwargs) | set(defaults) != set(params) | set(defaults):
                         continue
                     matches = True
                     for k, v in defaults.items():

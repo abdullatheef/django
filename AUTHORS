@@ -8,6 +8,7 @@ answer newbie questions, and generally made Django that much better:
     Aaron Cannon <cannona@fireantproductions.com>
     Aaron Swartz <http://www.aaronsw.com/>
     Aaron T. Myers <atmyers@gmail.com>
+    Abhishek Gautam <abhishekg1128@yahoo.com>
     Adam Johnson <https://github.com/adamchainz>
     Adam Malinowski <http://adammalinowski.co.uk>
     Adam Vandenberg
@@ -139,8 +140,10 @@ answer newbie questions, and generally made Django that much better:
     Cameron Knight (ckknight)
     Can Burak Çilingir <canburak@cs.bilgi.edu.tr>
     Carl Meyer <carl@oddbird.net>
+    Carles Pina i Estany <carles@pina.cat>
     Carlos Eduardo de Paula <carlosedp@gmail.com>
     Carlos Matías de la Torre <cmdelatorre@gmail.com>
+    Carlton Gibson <carlton.gibson@noumenal.es>
     cedric@terramater.net
     ChaosKCW
     Charlie Leifer <coleifer@gmail.com>
@@ -323,6 +326,7 @@ answer newbie questions, and generally made Django that much better:
     Igor Kolar <ike@email.si>
     Illia Volochii <illia.volochii@gmail.com>
     Ilya Semenov <semenov@inetss.com>
+    Ingo Klöcker <djangoproject@ingo-kloecker.de>
     I.S. van Oostveen <v.oostveen@idca.nl>
     ivan.chelubeev@gmail.com
     Ivan Sagalaev (Maniac) <http://www.softwaremaniacs.org/>
@@ -376,6 +380,7 @@ answer newbie questions, and generally made Django that much better:
     Jiri Barton
     Joachim Jablon <ewjoachim@gmail.com>
     Joao Oliveira <joaoxsouls@gmail.com>
+    Joao Pedro Silva <j.pedro004@gmail.com>
     Joe Heck <http://www.rhonabwy.com/wp/>
     Joel Bohman <mail@jbohman.com>
     Joel Heenan <joelh-django@planetjoel.com>
@@ -612,6 +617,7 @@ answer newbie questions, and generally made Django that much better:
     Paulo Poiati <paulogpoiati@gmail.com>
     Paulo Scardine <paulo@scardine.com.br>
     Paul Smith <blinkylights23@gmail.com>
+    Pavel Kulikov <kulikovpavel@gmail.com>
     pavithran s <pavithran.s@gmail.com>
     Pavlo Kapyshin <i@93z.org>
     permonik@mesias.brnonet.cz
@@ -721,6 +727,7 @@ answer newbie questions, and generally made Django that much better:
     Stanislaus Madueke
     starrynight <cmorgh@gmail.com>
     Stefane Fermgier <sf@fermigier.com>
+    Stefano Rivera <stefano@rivera.za.net>
     Stéphane Raimbault <stephane.raimbault@gmail.com>
     Stephan Jaekel <steph@rdev.info>
     Stephen Burrows <stephen.r.burrows@gmail.com>
@@ -734,6 +741,7 @@ answer newbie questions, and generally made Django that much better:
     Sutrisno Efendi <kangfend@gmail.com>
     Swaroop C H <http://www.swaroopch.info>
     Szilveszter Farkas <szilveszter.farkas@gmail.com>
+    Taavi Teska <taaviteska@gmail.com>
     Tai Lee <real.human@mrmachine.net>
     Takashi Matsuo <matsuo.takashi@gmail.com>
     Tareque Hossain <http://www.codexn.com>
@@ -834,7 +842,6 @@ A big THANK YOU goes to:
 
     Ian Bicking for convincing Adrian to ditch code generation.
 
-    Mark Pilgrim for "Dive Into Python" (http://www.diveintopython.net,
-    http://www.diveintopython3.net).
+    Mark Pilgrim for "Dive Into Python" (http://www.diveintopython3.net).
 
     Guido van Rossum for creating Python.

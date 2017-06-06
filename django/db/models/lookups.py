@@ -76,6 +76,8 @@ class Lookup:
 
     def process_lhs(self, compiler, connection, lhs=None):
         lhs = lhs or self.lhs
+        if hasattr(lhs, 'resolve_expression'):
+            lhs = lhs.resolve_expression(compiler.query)
         return compiler.compile(lhs)
 
     def process_rhs(self, compiler, connection):
@@ -87,12 +89,6 @@ class Lookup:
                 value = Value(value, output_field=self.lhs.output_field)
             value = self.apply_bilateral_transforms(value)
             value = value.resolve_expression(compiler.query)
-        # Due to historical reasons there are a couple of different
-        # ways to produce sql here. get_compiler is likely a Query
-        # instance and as_sql just something with as_sql. Finally the value
-        # can of course be just plain Python value.
-        if hasattr(value, 'get_compiler'):
-            value = value.get_compiler(connection=connection)
         if hasattr(value, 'as_sql'):
             sql, params = compiler.compile(value)
             return '(' + sql + ')', params
@@ -365,6 +361,9 @@ class In(FieldGetDbPrepValueIterableMixin, BuiltinLookup):
             placeholder = '(' + ', '.join(sqls) + ')'
             return (placeholder, sqls_params)
         else:
+            if not getattr(self.rhs, 'has_select_fields', True):
+                self.rhs.clear_select_clause()
+                self.rhs.add_fields(['pk'])
             return super().process_rhs(compiler, connection)
 
     def get_rhs_op(self, connection, rhs):

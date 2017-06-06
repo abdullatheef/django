@@ -122,7 +122,7 @@ class ForwardManyToOneDescriptor:
         # The check for len(...) == 1 is a special case that allows the query
         # to be join-less and smaller. Refs #21760.
         if self.field.remote_field.is_hidden() or len(self.field.foreign_related_fields) == 1:
-            query = {'%s__in' % related_field.name: set(instance_attr(inst)[0] for inst in instances)}
+            query = {'%s__in' % related_field.name: {instance_attr(inst)[0] for inst in instances}}
         else:
             query = {'%s__in' % self.field.related_query_name(): instances}
         queryset = queryset.filter(**query)
@@ -271,7 +271,10 @@ class ForwardOneToOneDescriptor(ForwardManyToOneDescriptor):
             # on the related model for every deferred field.
             if not any(field in fields for field in deferred):
                 kwargs = {field: getattr(instance, field) for field in fields}
-                return rel_model(**kwargs)
+                obj = rel_model(**kwargs)
+                obj._state.adding = instance._state.adding
+                obj._state.db = instance._state.db
+                return obj
         return super().get_object(instance)
 
 
@@ -316,7 +319,7 @@ class ReverseOneToOneDescriptor:
         rel_obj_attr = attrgetter(self.related.field.attname)
 
         def instance_attr(obj):
-            return obj._get_pk_val()
+            return obj.pk
 
         instances_dict = {instance_attr(inst): inst for inst in instances}
         query = {'%s__in' % self.related.field.name: instances}
@@ -351,7 +354,7 @@ class ReverseOneToOneDescriptor:
         try:
             rel_obj = getattr(instance, self.cache_name)
         except AttributeError:
-            related_pk = instance._get_pk_val()
+            related_pk = instance.pk
             if related_pk is None:
                 rel_obj = None
             else:

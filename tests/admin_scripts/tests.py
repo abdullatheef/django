@@ -112,11 +112,10 @@ class AdminScriptTestCase(unittest.TestCase):
         Returns the paths for any external backend packages.
         """
         paths = []
-        first_package_re = re.compile(r'(^[^\.]+)\.')
         for backend in settings.DATABASES.values():
-            result = first_package_re.findall(backend['ENGINE'])
-            if result and result != ['django']:
-                backend_pkg = __import__(result[0])
+            package = backend['ENGINE'].split('.')[0]
+            if package != 'django':
+                backend_pkg = __import__(package)
                 backend_dir = os.path.dirname(backend_pkg.__file__)
                 paths.append(os.path.dirname(backend_dir))
         return paths
@@ -1906,6 +1905,25 @@ class StartProject(LiveServerTestCase, AdminScriptTestCase):
             )
             self.assertFalse(os.path.exists(testproject_dir))
 
+    def test_importable_project_name(self):
+        """
+        startproject validates that project name doesn't clash with existing
+        Python modules.
+        """
+        bad_name = 'os'
+        args = ['startproject', bad_name]
+        testproject_dir = os.path.join(self.test_dir, bad_name)
+        self.addCleanup(shutil.rmtree, testproject_dir, True)
+
+        out, err = self.run_django_admin(args)
+        self.assertOutput(
+            err,
+            "CommandError: 'os' conflicts with the name of an existing "
+            "Python module and cannot be used as a project name. Please try "
+            "another name."
+        )
+        self.assertFalse(os.path.exists(testproject_dir))
+
     def test_simple_project_different_directory(self):
         "Make sure the startproject management command creates a project in a specific directory"
         args = ['startproject', 'testproject', 'othertestproject']
@@ -2086,6 +2104,43 @@ class StartProject(LiveServerTestCase, AdminScriptTestCase):
                 'üäö €'])
 
 
+class StartApp(AdminScriptTestCase):
+
+    def test_invalid_name(self):
+        """startapp validates that app name is a valid Python identifier."""
+        for bad_name in ('7testproject', '../testproject'):
+            args = ['startapp', bad_name]
+            testproject_dir = os.path.join(self.test_dir, bad_name)
+            self.addCleanup(shutil.rmtree, testproject_dir, True)
+
+            out, err = self.run_django_admin(args)
+            self.assertOutput(
+                err,
+                "CommandError: '{}' is not a valid app name. Please make "
+                "sure the name is a valid identifier.".format(bad_name)
+            )
+            self.assertFalse(os.path.exists(testproject_dir))
+
+    def test_importable_name(self):
+        """
+        startapp validates that app name doesn't clash with existing Python
+        modules.
+        """
+        bad_name = 'os'
+        args = ['startapp', bad_name]
+        testproject_dir = os.path.join(self.test_dir, bad_name)
+        self.addCleanup(shutil.rmtree, testproject_dir, True)
+
+        out, err = self.run_django_admin(args)
+        self.assertOutput(
+            err,
+            "CommandError: 'os' conflicts with the name of an existing "
+            "Python module and cannot be used as an app name. Please try "
+            "another name."
+        )
+        self.assertFalse(os.path.exists(testproject_dir))
+
+
 class DiffSettings(AdminScriptTestCase):
     """Tests for diffsettings management command."""
 
@@ -2120,6 +2175,32 @@ class DiffSettings(AdminScriptTestCase):
         self.assertNoOutput(err)
         self.assertNotInOutput(out, "FOO")
         self.assertOutput(out, "BAR = 'bar2'")
+
+    def test_unified(self):
+        """--output=unified emits settings diff in unified mode."""
+        self.write_settings('settings_to_diff.py', sdict={'FOO': '"bar"'})
+        self.addCleanup(self.remove_settings, 'settings_to_diff.py')
+        args = ['diffsettings', '--settings=settings_to_diff', '--output=unified']
+        out, err = self.run_manage(args)
+        self.assertNoOutput(err)
+        self.assertOutput(out, "+ FOO = 'bar'")
+        self.assertOutput(out, "- SECRET_KEY = ''")
+        self.assertOutput(out, "+ SECRET_KEY = 'django_tests_secret_key'")
+        self.assertNotInOutput(out, "  APPEND_SLASH = True")
+
+    def test_unified_all(self):
+        """
+        --output=unified --all emits settings diff in unified mode and includes
+        settings with the default value.
+        """
+        self.write_settings('settings_to_diff.py', sdict={'FOO': '"bar"'})
+        self.addCleanup(self.remove_settings, 'settings_to_diff.py')
+        args = ['diffsettings', '--settings=settings_to_diff', '--output=unified', '--all']
+        out, err = self.run_manage(args)
+        self.assertNoOutput(err)
+        self.assertOutput(out, "  APPEND_SLASH = True")
+        self.assertOutput(out, "+ FOO = 'bar'")
+        self.assertOutput(out, "- SECRET_KEY = ''")
 
 
 class Dumpdata(AdminScriptTestCase):

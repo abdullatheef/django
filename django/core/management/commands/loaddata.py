@@ -2,6 +2,7 @@ import functools
 import glob
 import gzip
 import os
+import sys
 import warnings
 import zipfile
 from itertools import product
@@ -25,6 +26,8 @@ try:
 except ImportError:
     has_bz2 = False
 
+READ_STDIN = '-'
+
 
 class Command(BaseCommand):
     help = 'Installs the named fixture(s) in the database.'
@@ -44,13 +47,17 @@ class Command(BaseCommand):
             help='Only look for fixtures in the specified app.',
         )
         parser.add_argument(
-            '--ignorenonexistent', '-i', action='store_true', dest='ignore', default=False,
+            '--ignorenonexistent', '-i', action='store_true', dest='ignore',
             help='Ignores entries in the serialized data for fields that do not '
                  'currently exist on the model.',
         )
         parser.add_argument(
             '-e', '--exclude', dest='exclude', action='append', default=[],
             help='An app_label or app_label.ModelName to exclude. Can be used multiple times.',
+        )
+        parser.add_argument(
+            '--format', action='store', dest='format', default=None,
+            help='Format of serialized data when reading from stdin.',
         )
 
     def handle(self, *fixture_labels, **options):
@@ -59,6 +66,7 @@ class Command(BaseCommand):
         self.app_label = options['app_label']
         self.verbosity = options['verbosity']
         self.excluded_models, self.excluded_apps = parse_apps_and_model_labels(options['exclude'])
+        self.format = options['format']
 
         with transaction.atomic(using=self.using):
             self.loaddata(fixture_labels)
@@ -85,6 +93,7 @@ class Command(BaseCommand):
             None: (open, 'rb'),
             'gz': (gzip.GzipFile, 'rb'),
             'zip': (SingleZipReader, 'r'),
+            'stdin': (lambda *args: sys.stdin, None),
         }
         if has_bz2:
             self.compression_formats['bz2'] = (bz2.BZ2File, 'r')
@@ -201,9 +210,12 @@ class Command(BaseCommand):
     @functools.lru_cache(maxsize=None)
     def find_fixtures(self, fixture_label):
         """Find fixture files for a given label."""
+        if fixture_label == READ_STDIN:
+            return [(READ_STDIN, None, READ_STDIN)]
+
         fixture_name, ser_fmt, cmp_fmt = self.parse_name(fixture_label)
         databases = [self.using, None]
-        cmp_fmts = list(self.compression_formats.keys()) if cmp_fmt is None else [cmp_fmt]
+        cmp_fmts = list(self.compression_formats) if cmp_fmt is None else [cmp_fmt]
         ser_fmts = serializers.get_public_serializer_formats() if ser_fmt is None else [ser_fmt]
 
         if self.verbosity >= 2:
@@ -223,7 +235,7 @@ class Command(BaseCommand):
             '.'.join(ext for ext in combo if ext)
             for combo in product(databases, ser_fmts, cmp_fmts)
         )
-        targets = set('.'.join((fixture_name, suffix)) for suffix in suffixes)
+        targets = {'.'.join((fixture_name, suffix)) for suffix in suffixes}
 
         fixture_files = []
         for fixture_dir in fixture_dirs:
@@ -288,6 +300,11 @@ class Command(BaseCommand):
         """
         Split fixture name in name, serialization format, compression format.
         """
+        if fixture_name == READ_STDIN:
+            if not self.format:
+                raise CommandError('--format must be specified when reading from stdin.')
+            return READ_STDIN, self.format, 'stdin'
+
         parts = fixture_name.rsplit('.', 2)
 
         if len(parts) > 1 and parts[-1] in self.compression_formats:

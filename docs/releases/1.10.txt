@@ -355,7 +355,7 @@ Management Commands
   accepts a command object as the first argument.
 
 * The :djadmin:`shell` command supports tab completion on systems using
-  ``libedit``, e.g. Mac OSX.
+  ``libedit``, e.g. macOS.
 
 * The :djadmin:`inspectdb` command lets you choose what tables should be
   inspected by specifying their names as arguments.
@@ -918,6 +918,11 @@ Miscellaneous
   ``{% static 'img.svg#fragment' %}``, since the ``#`` is encoded as ``%23``.
   To adapt, move the fragment outside the template tag:
   ``{% static 'img.svg' %}#fragment``.
+
+* When :setting:`USE_L10N` is ``True``, localization is now applied for the
+  :tfilter:`date` and :tfilter:`time` filters when no format string is
+  specified. The ``DATE_FORMAT`` and ``TIME_FORMAT`` specifiers from the active
+  locale are used instead of the settings of the same name.
 
 .. _deprecated-features-1.10:
 

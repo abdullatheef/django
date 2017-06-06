@@ -90,8 +90,8 @@ class BaseDatabaseFeatures:
     # Does the backend order NULL values as largest or smallest?
     nulls_order_largest = False
 
-    # Is there a 1000 item limit on query parameters?
-    supports_1000_query_parameters = True
+    # The database's limit on the number of query parameters.
+    max_query_params = None
 
     # Can an object have an autoincrement primary key of 0? MySQL says No.
     allows_auto_pk_0 = True
@@ -226,6 +226,9 @@ class BaseDatabaseFeatures:
     supports_select_intersection = True
     supports_select_difference = True
     supports_slicing_ordering_in_compound = False
+
+    # Does the backend support indexing a TextField?
+    supports_index_on_text_field = True
 
     def __init__(self, connection):
         self.connection = connection
