@@ -2,12 +2,17 @@ import hashlib
 import os
 
 from django.core.files.uploadedfile import UploadedFile
+from django.core.files.uploadhandler import TemporaryFileUploadHandler
 from django.http import HttpResponse, HttpResponseServerError, JsonResponse
-from django.utils.encoding import force_bytes, force_text
 
 from .models import FileModel
-from .tests import UNICODE_FILENAME, UPLOAD_TO
-from .uploadhandler import ErroringUploadHandler, QuotaUploadHandler
+from .tests import UNICODE_FILENAME, UPLOAD_FOLDER
+from .uploadhandler import (
+    ErroringUploadHandler,
+    QuotaUploadHandler,
+    StopUploadTemporaryFileHandler,
+    TraversalUploadHandler,
+)
 
 
 def file_upload_view(request):
@@ -16,12 +21,14 @@ def file_upload_view(request):
     """
     form_data = request.POST.copy()
     form_data.update(request.FILES)
-    if isinstance(form_data.get('file_field'), UploadedFile) and isinstance(form_data['name'], str):
+    if isinstance(form_data.get("file_field"), UploadedFile) and isinstance(
+        form_data["name"], str
+    ):
         # If a file is posted, the dummy client should only post the file name,
         # not the full path.
-        if os.path.dirname(form_data['file_field'].name) != '':
+        if os.path.dirname(form_data["file_field"].name) != "":
             return HttpResponseServerError()
-        return HttpResponse('')
+        return HttpResponse()
     else:
         return HttpResponseServerError()
 
@@ -34,53 +41,40 @@ def file_upload_view_verify(request):
     form_data.update(request.FILES)
 
     for key, value in form_data.items():
-        if key.endswith('_hash'):
+        if key.endswith("_hash"):
             continue
-        if key + '_hash' not in form_data:
+        if key + "_hash" not in form_data:
             continue
-        submitted_hash = form_data[key + '_hash']
+        submitted_hash = form_data[key + "_hash"]
         if isinstance(value, UploadedFile):
             new_hash = hashlib.sha1(value.read()).hexdigest()
         else:
-            new_hash = hashlib.sha1(force_bytes(value)).hexdigest()
+            new_hash = hashlib.sha1(value.encode()).hexdigest()
         if new_hash != submitted_hash:
             return HttpResponseServerError()
 
     # Adding large file to the database should succeed
-    largefile = request.FILES['file_field2']
+    largefile = request.FILES["file_field2"]
     obj = FileModel()
     obj.testfile.save(largefile.name, largefile)
 
-    return HttpResponse('')
+    return HttpResponse()
 
 
 def file_upload_unicode_name(request):
-
-    # Check to see if unicode name came through properly.
-    if not request.FILES['file_unicode'].name.endswith(UNICODE_FILENAME):
+    # Check to see if Unicode name came through properly.
+    if not request.FILES["file_unicode"].name.endswith(UNICODE_FILENAME):
         return HttpResponseServerError()
-
-    response = None
-
     # Check to make sure the exotic characters are preserved even
     # through file save.
-    uni_named_file = request.FILES['file_unicode']
-    obj = FileModel.objects.create(testfile=uni_named_file)
-    full_name = '%s/%s' % (UPLOAD_TO, uni_named_file.name)
-    if not os.path.exists(full_name):
-        response = HttpResponseServerError()
-
-    # Cleanup the object with its exotic file name immediately.
-    # (shutil.rmtree used elsewhere in the tests to clean up the
-    # upload directory has been seen to choke on unicode
-    # filenames on Windows.)
-    obj.delete()
-    os.unlink(full_name)
-
-    if response:
-        return response
-    else:
-        return HttpResponse('')
+    uni_named_file = request.FILES["file_unicode"]
+    file_model = FileModel.objects.create(testfile=uni_named_file)
+    full_name = f"{UPLOAD_FOLDER}/{uni_named_file.name}"
+    return (
+        HttpResponse()
+        if file_model.testfile.storage.exists(full_name)
+        else HttpResponseServerError()
+    )
 
 
 def file_upload_echo(request):
@@ -95,9 +89,11 @@ def file_upload_echo_content(request):
     """
     Simple view to echo back the content of uploaded files for tests.
     """
+
     def read_and_close(f):
         with f:
             return f.read().decode()
+
     r = {k: read_and_close(f) for k, f in request.FILES.items()}
     return JsonResponse(r)
 
@@ -117,6 +113,24 @@ def file_upload_quota_broken(request):
     response = file_upload_echo(request)
     request.upload_handlers.insert(0, QuotaUploadHandler())
     return response
+
+
+def file_stop_upload_temporary_file(request):
+    request.upload_handlers.insert(0, StopUploadTemporaryFileHandler())
+    request.upload_handlers.pop(2)
+    request.FILES  # Trigger file parsing.
+    return JsonResponse(
+        {"temp_path": request.upload_handlers[0].file.temporary_file_path()},
+    )
+
+
+def file_upload_interrupted_temporary_file(request):
+    request.upload_handlers.insert(0, TemporaryFileUploadHandler())
+    request.upload_handlers.pop(2)
+    request.FILES  # Trigger file parsing.
+    return JsonResponse(
+        {"temp_path": request.upload_handlers[0].file.temporary_file_path()},
+    )
 
 
 def file_upload_getlist_count(request):
@@ -139,10 +153,10 @@ def file_upload_filename_case_view(request):
     """
     Check adding the file to the database will preserve the filename case.
     """
-    file = request.FILES['file_field']
+    file = request.FILES["file_field"]
     obj = FileModel()
     obj.testfile.save(file.name, file)
-    return HttpResponse('%d' % obj.pk)
+    return HttpResponse("%d" % obj.pk)
 
 
 def file_upload_content_type_extra(request):
@@ -151,11 +165,21 @@ def file_upload_content_type_extra(request):
     """
     params = {}
     for file_name, uploadedfile in request.FILES.items():
-        params[file_name] = {k: force_text(v) for k, v in uploadedfile.content_type_extra.items()}
+        params[file_name] = {
+            k: v.decode() for k, v in uploadedfile.content_type_extra.items()
+        }
     return JsonResponse(params)
 
 
 def file_upload_fd_closing(request, access):
-    if access == 't':
+    if access == "t":
         request.FILES  # Trigger file parsing.
-    return HttpResponse('')
+    return HttpResponse()
+
+
+def file_upload_traversal_view(request):
+    request.upload_handlers.insert(0, TraversalUploadHandler())
+    request.FILES  # Trigger file parsing.
+    return JsonResponse(
+        {"file_name": request.upload_handlers[0].file_name},
+    )

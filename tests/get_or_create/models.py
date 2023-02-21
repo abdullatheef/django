@@ -2,13 +2,11 @@ from django.db import models
 
 
 class Person(models.Model):
-    first_name = models.CharField(max_length=100)
+    first_name = models.CharField(max_length=100, unique=True)
     last_name = models.CharField(max_length=100)
     birthday = models.DateField()
     defaults = models.TextField()
-
-    def __str__(self):
-        return '%s %s' % (self.first_name, self.last_name)
+    create_defaults = models.TextField()
 
 
 class DefaultPerson(models.Model):
@@ -53,12 +51,17 @@ class Author(models.Model):
     name = models.CharField(max_length=100)
 
 
+class Journalist(Author):
+    specialty = models.CharField(max_length=100)
+
+
 class Book(models.Model):
     name = models.CharField(max_length=100)
-    authors = models.ManyToManyField(Author, related_name='books')
+    authors = models.ManyToManyField(Author, related_name="books")
     publisher = models.ForeignKey(
         Publisher,
         models.CASCADE,
-        related_name='books',
+        related_name="books",
         db_column="publisher_id_column",
     )
+    updated = models.DateTimeField(auto_now=True)

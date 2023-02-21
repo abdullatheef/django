@@ -1,7 +1,8 @@
-from django.conf.urls import url
+from django.urls import path
 
-from .views import ArticleFormView
+from .views import ArticleFormView, form_view
 
 urlpatterns = [
-    url(r'^model_form/(?P<pk>[0-9]+)/$', ArticleFormView.as_view(), name="article_form"),
+    path("form_view/", form_view, name="form_view"),
+    path("model_form/<int:pk>/", ArticleFormView.as_view(), name="article_form"),
 ]

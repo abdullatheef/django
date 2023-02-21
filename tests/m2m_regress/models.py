@@ -6,8 +6,8 @@ from django.db import models
 # explicitly reversible.
 class SelfRefer(models.Model):
     name = models.CharField(max_length=10)
-    references = models.ManyToManyField('self')
-    related = models.ManyToManyField('self')
+    references = models.ManyToManyField("self")
+    related = models.ManyToManyField("self")
 
     def __str__(self):
         return self.name
@@ -22,7 +22,7 @@ class Tag(models.Model):
 
 # Regression for #11956 -- a many to many to the base class
 class TagCollection(Tag):
-    tags = models.ManyToManyField(Tag, related_name='tag_collections')
+    tags = models.ManyToManyField(Tag, related_name="tag_collections")
 
     def __str__(self):
         return self.name
@@ -73,22 +73,23 @@ class User(models.Model):
 class BadModelWithSplit(models.Model):
     name = models.CharField(max_length=1)
 
-    def split(self):
-        raise RuntimeError('split should not be called')
-
     class Meta:
         abstract = True
+
+    def split(self):
+        raise RuntimeError("split should not be called")
 
 
 class RegressionModelSplit(BadModelWithSplit):
     """
     Model with a split method should not cause an error in add_lazy_relation
     """
-    others = models.ManyToManyField('self')
+
+    others = models.ManyToManyField("self")
 
 
 # Regression for #24505 -- Two ManyToManyFields with the same "to" model
 # and related_name set to '+'.
 class Post(models.Model):
-    primary_lines = models.ManyToManyField(Line, related_name='+')
-    secondary_lines = models.ManyToManyField(Line, related_name='+')
+    primary_lines = models.ManyToManyField(Line, related_name="+")
+    secondary_lines = models.ManyToManyField(Line, related_name="+")

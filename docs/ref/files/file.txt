@@ -10,7 +10,7 @@ for basic file handling in Django.
 The ``File`` class
 ==================
 
-.. class:: File(file_object)
+.. class:: File(file_object, name=None)
 
     The :class:`File` class is a thin wrapper around a Python
     :py:term:`file object` with some Django-specific additions.
@@ -58,10 +58,6 @@ The ``File`` class
 
         It can be used as a context manager, e.g. ``with file.open() as f:``.
 
-        .. versionchanged:: 2.0
-
-            Context manager support was added.
-
     .. method:: __iter__()
 
         Iterate over the file yielding one line at a time.
@@ -90,16 +86,12 @@ The ``File`` class
     ``truncate``, ``write``, ``writelines``, ``readable()``, ``writable()``,
     and ``seekable()``.
 
-    .. versionchanged:: 1.11
-
-        The ``readable()`` and ``writable()`` methods were added.
-
 .. currentmodule:: django.core.files.base
 
 The ``ContentFile`` class
 =========================
 
-.. class:: ContentFile(File)
+.. class:: ContentFile(content, name=None)
 
     The ``ContentFile`` class inherits from :class:`~django.core.files.File`,
     but unlike :class:`~django.core.files.File` it operates on string content
@@ -107,7 +99,7 @@ The ``ContentFile`` class
 
         from django.core.files.base import ContentFile
 
-        f1 = ContentFile("esta sentencia está en español")
+        f1 = ContentFile("esta frase está en español")
         f2 = ContentFile(b"these are bytes")
 
 .. currentmodule:: django.core.files.images
@@ -115,7 +107,7 @@ The ``ContentFile`` class
 The ``ImageFile`` class
 =======================
 
-.. class:: ImageFile(file_object)
+.. class:: ImageFile(file_object, name=None)
 
     Django provides a built-in class specifically for images.
     :class:`django.core.files.images.ImageFile` inherits all the attributes
@@ -145,10 +137,14 @@ below) will also have a couple of extra methods:
     to point to it. If ``save`` is ``True``, the model's ``save()`` method will
     be called once the file is saved. That is, these two lines::
 
+    .. code-block:: pycon
+
         >>> car.photo.save('myphoto.jpg', content, save=False)
         >>> car.save()
 
-    are equivalent to::
+    are equivalent to:
+
+    .. code-block:: pycon
 
         >>> car.photo.save('myphoto.jpg', content, save=True)
 

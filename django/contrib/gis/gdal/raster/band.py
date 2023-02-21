@@ -1,18 +1,24 @@
 from ctypes import byref, c_double, c_int, c_void_p
 
-from django.contrib.gis.gdal.base import GDALBase
 from django.contrib.gis.gdal.error import GDALException
 from django.contrib.gis.gdal.prototypes import raster as capi
+from django.contrib.gis.gdal.raster.base import GDALRasterBase
 from django.contrib.gis.shortcuts import numpy
-from django.utils.encoding import force_text
+from django.utils.encoding import force_str
 
-from .const import GDAL_INTEGER_TYPES, GDAL_PIXEL_TYPES, GDAL_TO_CTYPES
+from .const import (
+    GDAL_COLOR_TYPES,
+    GDAL_INTEGER_TYPES,
+    GDAL_PIXEL_TYPES,
+    GDAL_TO_CTYPES,
+)
 
 
-class GDALBand(GDALBase):
+class GDALBand(GDALRasterBase):
     """
     Wrap a GDAL raster band, needs to be obtained from a GDALRaster object.
     """
+
     def __init__(self, source, index):
         self.source = source
         self._ptr = capi.get_ds_raster_band(source._ptr, index)
@@ -30,7 +36,7 @@ class GDALBand(GDALBase):
         """
         Return the description string of the band.
         """
-        return force_text(capi.get_band_description(self._ptr))
+        return force_str(capi.get_band_description(self._ptr))
 
     @property
     def width(self):
@@ -77,8 +83,14 @@ class GDALBand(GDALBase):
         # Prepare array with arguments for capi function
         smin, smax, smean, sstd = c_double(), c_double(), c_double(), c_double()
         stats_args = [
-            self._ptr, c_int(approximate), byref(smin), byref(smax),
-            byref(smean), byref(sstd), c_void_p(), c_void_p(),
+            self._ptr,
+            c_int(approximate),
+            byref(smin),
+            byref(smax),
+            byref(smean),
+            byref(sstd),
+            c_void_p(),
+            c_void_p(),
         ]
 
         if refresh or self._stats_refresh:
@@ -150,11 +162,9 @@ class GDALBand(GDALBase):
         Set the nodata value for this band.
         """
         if value is None:
-            if not capi.delete_band_nodata_value:
-                raise ValueError('GDAL >= 2.1 required to delete nodata values.')
             capi.delete_band_nodata_value(self._ptr)
         elif not isinstance(value, (int, float)):
-            raise ValueError('Nodata value must be numeric or None.')
+            raise ValueError("Nodata value must be numeric or None.")
         else:
             capi.set_band_nodata_value(self._ptr, value)
         self._flush()
@@ -168,6 +178,13 @@ class GDALBand(GDALBase):
             dtype = GDAL_PIXEL_TYPES[dtype]
         return dtype
 
+    def color_interp(self, as_string=False):
+        """Return the GDAL color interpretation for this band."""
+        color = capi.get_band_color_interp(self._ptr)
+        if as_string:
+            color = GDAL_COLOR_TYPES[color]
+        return color
+
     def data(self, data=None, offset=None, size=None, shape=None, as_memoryview=False):
         """
         Read or writes pixel values for this band. Blocks of data can
@@ -177,20 +194,14 @@ class GDALBand(GDALBase):
 
         Allowed input data types are bytes, memoryview, list, tuple, and array.
         """
-        if not offset:
-            offset = (0, 0)
-
-        if not size:
-            size = (self.width - offset[0], self.height - offset[1])
-
-        if not shape:
-            shape = size
-
+        offset = offset or (0, 0)
+        size = size or (self.width - offset[0], self.height - offset[1])
+        shape = shape or size
         if any(x <= 0 for x in size):
-            raise ValueError('Offset too big for this raster.')
+            raise ValueError("Offset too big for this raster.")
 
         if size[0] > self.width or size[1] > self.height:
-            raise ValueError('Size is larger than raster.')
+            raise ValueError("Size is larger than raster.")
 
         # Create ctypes type array generator
         ctypes_array = GDAL_TO_CTYPES[self.datatype()] * (shape[0] * shape[1])
@@ -205,15 +216,28 @@ class GDALBand(GDALBase):
             access_flag = 1
 
             # Instantiate ctypes array holding the input data
-            if isinstance(data, (bytes, memoryview)) or (numpy and isinstance(data, numpy.ndarray)):
+            if isinstance(data, (bytes, memoryview)) or (
+                numpy and isinstance(data, numpy.ndarray)
+            ):
                 data_array = ctypes_array.from_buffer_copy(data)
             else:
                 data_array = ctypes_array(*data)
 
         # Access band
-        capi.band_io(self._ptr, access_flag, offset[0], offset[1],
-                     size[0], size[1], byref(data_array), shape[0],
-                     shape[1], self.datatype(), 0, 0)
+        capi.band_io(
+            self._ptr,
+            access_flag,
+            offset[0],
+            offset[1],
+            size[0],
+            size[1],
+            byref(data_array),
+            shape[0],
+            shape[1],
+            self.datatype(),
+            0,
+            0,
+        )
 
         # Return data as numpy array if possible, otherwise as list
         if data is None:
@@ -233,7 +257,7 @@ class GDALBand(GDALBase):
 class BandList(list):
     def __init__(self, source):
         self.source = source
-        list.__init__(self)
+        super().__init__()
 
     def __iter__(self):
         for idx in range(1, len(self) + 1):
@@ -246,4 +270,4 @@ class BandList(list):
         try:
             return GDALBand(self.source, index + 1)
         except GDALException:
-            raise GDALException('Unable to get band index %d' % index)
+            raise GDALException("Unable to get band index %d" % index)

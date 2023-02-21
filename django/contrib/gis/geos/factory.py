@@ -8,7 +8,7 @@ def fromfile(file_h):
     """
     # If given a file name, get a real handle.
     if isinstance(file_h, str):
-        with open(file_h, 'rb') as file_h:
+        with open(file_h, "rb") as file_h:
             buf = file_h.read()
     else:
         buf = file_h.read()
@@ -17,10 +17,11 @@ def fromfile(file_h):
     if isinstance(buf, bytes):
         try:
             decoded = buf.decode()
-            if wkt_regex.match(decoded) or hex_regex.match(decoded):
-                return GEOSGeometry(decoded)
         except UnicodeDecodeError:
             pass
+        else:
+            if wkt_regex.match(decoded) or hex_regex.match(decoded):
+                return GEOSGeometry(decoded)
     else:
         return GEOSGeometry(buf)
 

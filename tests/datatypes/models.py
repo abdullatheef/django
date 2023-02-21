@@ -9,17 +9,14 @@ from django.db import models
 class Donut(models.Model):
     name = models.CharField(max_length=100)
     is_frosted = models.BooleanField(default=False)
-    has_sprinkles = models.NullBooleanField()
+    has_sprinkles = models.BooleanField(null=True)
     baked_date = models.DateField(null=True)
     baked_time = models.TimeField(null=True)
     consumed_at = models.DateTimeField(null=True)
     review = models.TextField()
 
     class Meta:
-        ordering = ('consumed_at',)
-
-    def __str__(self):
-        return self.name
+        ordering = ("consumed_at",)
 
 
 class RumBaba(models.Model):

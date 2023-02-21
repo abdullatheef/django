@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
-  <title>Page not found at {{ request.path_info|escape }}</title>
+  <title>Page not found at {{ request.path_info }}</title>
   <meta name="robots" content="NONE,NOARCHIVE">
   <style type="text/css">
     html * { padding:0; margin:0; }
     body * { padding:10px 20px; }
     body * * { padding:0; }
-    body { font:small sans-serif; background:#eee; }
+    body { font:small sans-serif; background:#eee; color:#000; }
     body>div { border-bottom:1px solid #ddd; }
     h1 { font-weight:normal; margin-bottom:.4em; }
     h1 span { font-size:60%; color:#666; font-weight:normal; }
@@ -20,11 +20,13 @@
     #info ol li { font-family: monospace; }
     #summary { background: #ffc; }
     #explanation { background:#eee; border-bottom: 0px none; }
+    pre.exception_value { font-family: sans-serif; color: #575757; font-size: 1.5em; margin: 10px 0 10px 0; }
   </style>
 </head>
 <body>
   <div id="summary">
     <h1>Page not found <span>(404)</span></h1>
+    {% if reason and resolved %}<pre class="exception_value">{{ reason }}</pre>{% endif %}
     <table class="meta">
       <tr>
         <th>Request Method:</th>
@@ -32,7 +34,7 @@
       </tr>
       <tr>
         <th>Request URL:</th>
-        <td>{{ request.build_absolute_uri|escape }}</td>
+        <td>{{ request.build_absolute_uri }}</td>
       </tr>
       {% if raising_view_name %}
       <tr>
@@ -52,7 +54,7 @@
         {% for pattern in urlpatterns %}
           <li>
             {% for pat in pattern %}
-                {{ pat.regex.pattern }}
+                {{ pat.pattern }}
                 {% if forloop.last and pat.name %}[name='{{ pat.name }}']{% endif %}
             {% endfor %}
           </li>
@@ -60,17 +62,18 @@
       </ol>
       <p>
         {% if request_path %}
-        The current path, <code>{{ request_path|escape }}</code>,{% else %}
-        The empty path{% endif %} didn't match any of these.
+          The current path, <code>{{ request_path }}</code>,
+        {% else %}
+          The empty path
+        {% endif %}
+        {% if resolved %}matched the last one.{% else %}didn’t match any of these.{% endif %}
       </p>
-    {% else %}
-      <p>{{ reason }}</p>
     {% endif %}
   </div>
 
   <div id="explanation">
     <p>
-      You're seeing this error because you have <code>DEBUG = True</code> in
+      You’re seeing this error because you have <code>DEBUG = True</code> in
       your Django settings file. Change that to <code>False</code>, and Django
       will display a standard 404 page.
     </p>

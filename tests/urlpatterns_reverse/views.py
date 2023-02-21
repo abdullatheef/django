@@ -7,11 +7,11 @@ from django.views.generic import RedirectView
 
 
 def empty_view(request, *args, **kwargs):
-    return HttpResponse('')
+    return HttpResponse()
 
 
 def absolute_kwargs_view(request, arg1=1, arg2=2):
-    return HttpResponse('')
+    return HttpResponse()
 
 
 def defaults_view(request, arg1, arg2):
@@ -27,7 +27,7 @@ def erroneous_view(request):
 
 
 def pass_resolver_match_view(request, *args, **kwargs):
-    response = HttpResponse('')
+    response = HttpResponse()
     response.resolver_match = request.resolver_match
     return response
 
@@ -37,19 +37,21 @@ uncallable = None  # neither a callable nor a string
 
 class ViewClass:
     def __call__(self, request, *args, **kwargs):
-        return HttpResponse('')
+        return HttpResponse()
 
 
 view_class_instance = ViewClass()
 
 
 class LazyRedirectView(RedirectView):
-    url = reverse_lazy('named-lazy-url-redirected-to')
+    url = reverse_lazy("named-lazy-url-redirected-to")
 
 
-@user_passes_test(lambda u: u.is_authenticated, login_url=reverse_lazy('some-login-page'))
+@user_passes_test(
+    lambda u: u.is_authenticated, login_url=reverse_lazy("some-login-page")
+)
 def login_required_view(request):
-    return HttpResponse('Hello you')
+    return HttpResponse("Hello you")
 
 
 def bad_view(request, *args, **kwargs):
@@ -57,7 +59,10 @@ def bad_view(request, *args, **kwargs):
 
 
 empty_view_partial = partial(empty_view, template_name="template.html")
-empty_view_nested_partial = partial(empty_view_partial, template_name="nested_partial.html")
+empty_view_nested_partial = partial(
+    empty_view_partial, template_name="nested_partial.html"
+)
 empty_view_wrapped = update_wrapper(
-    partial(empty_view, template_name="template.html"), empty_view,
+    partial(empty_view, template_name="template.html"),
+    empty_view,
 )
