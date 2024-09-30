@@ -1,7 +1,16 @@
 import operator
 
 from django.db import DatabaseError, NotSupportedError, connection
-from django.db.models import Exists, F, IntegerField, OuterRef, Subquery, Value
+from django.db.models import (
+    Exists,
+    F,
+    IntegerField,
+    OuterRef,
+    Subquery,
+    Transform,
+    Value,
+)
+from django.db.models.functions import Mod
 from django.test import TestCase, skipIfDBFeature, skipUnlessDBFeature
 from django.test.utils import CaptureQueriesContext
 
@@ -66,6 +75,12 @@ class QuerySetSetOperationTests(TestCase):
         qs2 = Number.objects.none()
         qs3 = qs1.union(qs2)
         self.assertNumbersEqual(qs3[:1], [0])
+
+    def test_union_all_none_slice(self):
+        qs = Number.objects.filter(id__in=[])
+        with self.assertNumQueries(0):
+            self.assertSequenceEqual(qs.union(qs), [])
+            self.assertSequenceEqual(qs.union(qs)[0:0], [])
 
     def test_union_empty_filter_slice(self):
         qs1 = Number.objects.filter(num__lte=0)
@@ -246,7 +261,24 @@ class QuerySetSetOperationTests(TestCase):
             )
             .values_list("num", "count")
         )
-        self.assertCountEqual(qs1.union(qs2), [(1, 0), (2, 1)])
+        self.assertCountEqual(qs1.union(qs2), [(1, 0), (1, 2)])
+
+    def test_union_with_field_and_annotation_values(self):
+        qs1 = (
+            Number.objects.filter(num=1)
+            .annotate(
+                zero=Value(0, IntegerField()),
+            )
+            .values_list("num", "zero")
+        )
+        qs2 = (
+            Number.objects.filter(num=2)
+            .annotate(
+                zero=Value(0, IntegerField()),
+            )
+            .values_list("zero", "num")
+        )
+        self.assertCountEqual(qs1.union(qs2), [(1, 0), (0, 2)])
 
     def test_union_with_extra_and_values_list(self):
         qs1 = (
@@ -322,6 +354,23 @@ class QuerySetSetOperationTests(TestCase):
             operator.itemgetter("num"),
         )
 
+    def test_order_by_annotation_transform(self):
+        class Mod2(Mod, Transform):
+            def __init__(self, expr):
+                super().__init__(expr, 2)
+
+        output_field = IntegerField()
+        output_field.register_lookup(Mod2, "mod2")
+        qs1 = Number.objects.annotate(
+            annotation=Value(1, output_field=output_field),
+        )
+        qs2 = Number.objects.annotate(
+            annotation=Value(2, output_field=output_field),
+        )
+        msg = "Ordering combined queries by transforms is not implemented."
+        with self.assertRaisesMessage(NotImplementedError, msg):
+            list(qs1.union(qs2).order_by("annotation__mod2"))
+
     def test_union_with_select_related_and_order(self):
         e1 = ExtraInfo.objects.create(value=7, info="e1")
         a1 = Author.objects.create(name="a1", num=1, extra=e1)
@@ -366,6 +415,20 @@ class QuerySetSetOperationTests(TestCase):
         self.assertSequenceEqual(
             qs1.union(qs2).order_by("extra_name").values_list("pk", flat=True),
             [reserved_name.pk],
+        )
+
+    def test_union_multiple_models_with_values_list_and_annotations(self):
+        ReservedName.objects.create(name="rn1", order=10)
+        Celebrity.objects.create(name="c1")
+        qs1 = ReservedName.objects.annotate(row_type=Value("rn")).values_list(
+            "name", "order", "row_type"
+        )
+        qs2 = Celebrity.objects.annotate(
+            row_type=Value("cb"), order=Value(-10)
+        ).values_list("name", "order", "row_type")
+        self.assertSequenceEqual(
+            qs1.union(qs2).order_by("order"),
+            [("c1", -10, "cb"), ("rn1", 10, "rn")],
         )
 
     def test_union_in_subquery(self):
